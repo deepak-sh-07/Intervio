@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from 'next/navigation';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Interview {
   id: number;
   role: string;
   company: string;
+  level: string;        
+  focus: string; 
   skills: string[];
   topics: string[];
   type: "Technical" | "Behavioral" | "Product / Case" | "Mixed";
@@ -31,18 +34,18 @@ interface NewSession {
 
 // ── Seed data ──────────────────────────────────────────────────────────────────
 const SEED: Interview[] = [
-  { id: 1, role: "Software Engineer", company: "Google", skills: ["Python", "System Design"], topics: ["Algorithms", "Scalability"], type: "Technical", difficulty: "Advanced", duration: "45 min", score: 88, status: "Completed", date: "Jun 24, 2026" },
-  { id: 2, role: "Product Manager", company: "Meta", skills: ["Product Sense", "Analytics"], topics: ["Go-to-market", "Metrics"], type: "Product / Case", difficulty: "Intermediate", duration: "30 min", score: 76, status: "Completed", date: "Jun 22, 2026" },
-  { id: 3, role: "Data Scientist", company: "Netflix", skills: ["SQL", "Statistics"], topics: ["ML Concepts", "A/B Testing"], type: "Mixed", difficulty: "Intermediate", duration: "60 min", score: 61, status: "Completed", date: "Jun 20, 2026" },
-  { id: 4, role: "Frontend Engineer", company: "Stripe", skills: ["React", "CSS", "TypeScript"], topics: ["Performance", "Accessibility"], type: "Technical", difficulty: "Intermediate", duration: "30 min", score: 91, status: "Completed", date: "Jun 18, 2026" },
-  { id: 5, role: "ML Engineer", company: "OpenAI", skills: ["PyTorch", "MLOps"], topics: ["Model Deployment", "LLMs"], type: "Technical", difficulty: "Advanced", duration: "45 min", score: 70, status: "Completed", date: "Jun 15, 2026" },
-  { id: 6, role: "Software Engineer", company: "Amazon", skills: ["Java", "Concurrency"], topics: ["Distributed Systems"], type: "Technical", difficulty: "Advanced", duration: "60 min", score: 55, status: "Completed", date: "Jun 12, 2026" },
-  { id: 7, role: "Product Manager", company: "Airbnb", skills: ["Roadmapping", "Metrics"], topics: ["Prioritization", "Behavioral"], type: "Behavioral", difficulty: "Intermediate", duration: "30 min", score: 82, status: "Completed", date: "Jun 10, 2026" },
-  { id: 8, role: "Software Engineer", company: "", skills: ["Python", "APIs"], topics: ["Algorithms", "REST"], type: "Technical", difficulty: "Beginner", duration: "45 min", score: 0, status: "In Progress", date: "Jun 9, 2026" },
-  { id: 9, role: "Data Scientist", company: "Spotify", skills: ["R", "Visualization"], topics: ["Experimentation"], type: "Mixed", difficulty: "Intermediate", duration: "45 min", score: 68, status: "Completed", date: "Jun 6, 2026" },
-  { id: 10, role: "Frontend Engineer", company: "", skills: ["TypeScript", "Testing"], topics: ["Component Design"], type: "Technical", difficulty: "Beginner", duration: "15 min", score: 0, status: "Abandoned", date: "Jun 3, 2026" },
-  { id: 11, role: "ML Engineer", company: "Anthropic", skills: ["Python", "NLP"], topics: ["Transformers", "Fine-tuning"], type: "Technical", difficulty: "Advanced", duration: "60 min", score: 85, status: "Completed", date: "May 30, 2026" },
-  { id: 12, role: "Software Engineer", company: "Figma", skills: ["Go", "Concurrency"], topics: ["System Design", "Behavioral"], type: "Mixed", difficulty: "Intermediate", duration: "60 min", score: 72, status: "Completed", date: "May 27, 2026" },
+  { id: 1, role: "Software Engineer", company: "Google", level: "Senior", focus: "Distributed systems", skills: ["Python", "System Design"], topics: ["Algorithms", "Scalability"], type: "Technical", difficulty: "Advanced", duration: "45 min", score: 88, status: "Completed", date: "Jun 24, 2026" },
+  { id: 2, role: "Product Manager", company: "Meta", level: "Mid level", focus: "Growth & monetization", skills: ["Product Sense", "Analytics"], topics: ["Go-to-market", "Metrics"], type: "Product / Case", difficulty: "Intermediate", duration: "30 min", score: 76, status: "Completed", date: "Jun 22, 2026" },
+  { id: 3, role: "Data Scientist", company: "Netflix", level: "Mid level", focus: "A/B testing & experimentation", skills: ["SQL", "Statistics"], topics: ["ML Concepts", "A/B Testing"], type: "Mixed", difficulty: "Intermediate", duration: "60 min", score: 61, status: "Completed", date: "Jun 20, 2026" },
+  { id: 4, role: "Frontend Engineer", company: "Stripe", level: "Mid level", focus: "Performance optimization", skills: ["React", "CSS", "TypeScript"], topics: ["Performance", "Accessibility"], type: "Technical", difficulty: "Intermediate", duration: "30 min", score: 91, status: "Completed", date: "Jun 18, 2026" },
+  { id: 5, role: "ML Engineer", company: "OpenAI", level: "Senior", focus: "LLM fine-tuning", skills: ["PyTorch", "MLOps"], topics: ["Model Deployment", "LLMs"], type: "Technical", difficulty: "Advanced", duration: "45 min", score: 70, status: "Completed", date: "Jun 15, 2026" },
+  { id: 6, role: "Software Engineer", company: "Amazon", level: "Senior", focus: "Concurrency & reliability", skills: ["Java", "Concurrency"], topics: ["Distributed Systems"], type: "Technical", difficulty: "Advanced", duration: "60 min", score: 55, status: "Completed", date: "Jun 12, 2026" },
+  { id: 7, role: "Product Manager", company: "Airbnb", level: "Mid level", focus: "Prioritization frameworks", skills: ["Roadmapping", "Metrics"], topics: ["Prioritization", "Behavioral"], type: "Behavioral", difficulty: "Intermediate", duration: "30 min", score: 82, status: "Completed", date: "Jun 10, 2026" },
+  { id: 8, role: "Software Engineer", company: "", level: "Entry level", focus: "", skills: ["Python", "APIs"], topics: ["Algorithms", "REST"], type: "Technical", difficulty: "Beginner", duration: "45 min", score: 0, status: "In Progress", date: "Jun 9, 2026" },
+  { id: 9, role: "Data Scientist", company: "Spotify", level: "Mid level", focus: "Experimentation design", skills: ["R", "Visualization"], topics: ["Experimentation"], type: "Mixed", difficulty: "Intermediate", duration: "45 min", score: 68, status: "Completed", date: "Jun 6, 2026" },
+  { id: 10, role: "Frontend Engineer", company: "", level: "Entry level", focus: "", skills: ["TypeScript", "Testing"], topics: ["Component Design"], type: "Technical", difficulty: "Beginner", duration: "15 min", score: 0, status: "Abandoned", date: "Jun 3, 2026" },
+  { id: 11, role: "ML Engineer", company: "Anthropic", level: "Senior", focus: "Transformers & NLP", skills: ["Python", "NLP"], topics: ["Transformers", "Fine-tuning"], type: "Technical", difficulty: "Advanced", duration: "60 min", score: 85, status: "Completed", date: "May 30, 2026" },
+  { id: 12, role: "Software Engineer", company: "Figma", level: "Mid level", focus: "System design & culture", skills: ["Go", "Concurrency"], topics: ["System Design", "Behavioral"], type: "Mixed", difficulty: "Intermediate", duration: "60 min", score: 72, status: "Completed", date: "May 27, 2026" },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -139,17 +142,17 @@ const TYPES: { label: Interview["type"]; icon: string; sub: string }[] = [
 const DIFFS: Interview["difficulty"][] = ["Beginner", "Intermediate", "Advanced"];
 const DURATIONS = ["15 min", "30 min", "45 min", "60 min"];
 
-const BLANK: NewSession = {
+const BLANK: NewSession = { // how form looks like
   role: "", company: "", level: "", duration: "30 min",
   skills: [], topics: [], focus: "",
   type: "Technical", difficulty: "Intermediate",
 };
 
 function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (s: NewSession) => void }) {
-  const [form, setForm] = useState<NewSession>({ ...BLANK });
+  const [form, setForm] = useState<NewSession>({ ...BLANK }); // all the values while creating a session is stored here 
   const [roleErr, setRoleErr] = useState(false);
 
-  function set<K extends keyof NewSession>(k: K, v: NewSession[K]) {
+  function set<K extends keyof NewSession>(k: K, v: NewSession[K]) { // updating forms values
     setForm((f) => ({ ...f, [k]: v }));
     if (k === "role") setRoleErr(false);
   }
@@ -159,12 +162,14 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
     onCreate({ ...form });
     setForm({ ...BLANK });
     onClose();
+    
   }
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      {/* interviw div */}
       <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] flex flex-col overflow-hidden border border-gray-100">
         {/* Head */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
@@ -186,6 +191,7 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
                 <input value={form.role} onChange={(e) => set("role", e.target.value)}
                   placeholder="e.g. Software Engineer"
                   className={`w-full px-3 py-2 text-sm border rounded-lg outline-none transition-all bg-white ${roleErr ? "border-red-400 ring-2 ring-red-50" : "border-gray-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50"}`} />
+                
                 {roleErr && <p className="text-xs text-red-500 mt-1">Role is required.</p>}
               </div>
               <div>
@@ -283,12 +289,15 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
           </button>
         </div>
       </div>
+
+
     </div>
   );
 }
 
 // ── Main dashboard ─────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const router = useRouter();
   const [interviews, setInterviews] = useState<Interview[]>(SEED);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -313,16 +322,38 @@ export default function Dashboard() {
     return { total: interviews.length, avg, hours: hours.toFixed(1), roles: new Set(interviews.map((i) => i.role)).size };
   }, [interviews]);
 
-  function handleCreate(s: NewSession) {
-    const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    setInterviews((prev) => [{
-      id: Date.now(), role: s.role, company: s.company,
-      skills: s.skills.length ? s.skills : ["General"],
-      topics: s.topics.length ? s.topics : ["General"],
-      type: s.type, difficulty: s.difficulty,
-      duration: s.duration, score: 0, status: "In Progress", date: now,
-    }, ...prev]);
-  }
+  async function handleCreate(s: NewSession) {
+  const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const newInterview = {
+    role: s.role,
+    company: s.company,
+    level: s.level,
+    focus: s.focus,
+    skills: s.skills.length ? s.skills : ["General"],
+    topics: s.topics.length ? s.topics : ["General"],
+    type: s.type,
+    difficulty: s.difficulty,
+    duration: s.duration,
+    score: 0,
+    status: "In Progress" as const,
+    date: now,
+  };
+
+  const req = await fetch("/api/auth/interview", {
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    body: JSON.stringify(newInterview),
+  });
+  const res = await req.json();
+
+  setInterviews((prev) => [{ ...newInterview, id: res.id }, ...prev]);
+
+  localStorage.setItem("CurrId", res.id.toString());
+  const id = localStorage.getItem("CurrId");
+  console.log("Current ID stored in localStorage:", id);
+  console.log(res);
+  router.push("/session");
+}
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans overflow-hidden">

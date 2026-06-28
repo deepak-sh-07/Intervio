@@ -15,7 +15,6 @@ model User {
   password  String
   image     String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   sessions  InterviewSession[]
 }
@@ -24,7 +23,6 @@ model InterviewSession {
   id         String   @id @default(cuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   role       String
   company    String?
   level      String?
@@ -37,12 +35,7 @@ model InterviewSession {
   score      Int?
   status     String   @default("In Progress")
   feedback   String?
-
-  startedAt  DateTime @default(now())
-  endedAt    DateTime?
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
   messages   Message[]
 }
 
