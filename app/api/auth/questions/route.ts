@@ -1,4 +1,5 @@
 import Groq from "groq-sdk";
+import  prisma  from "@/lib/prisma";
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 export async function POST(req: Request) {
   const { prompt } = await req.json();
@@ -13,9 +14,23 @@ export async function POST(req: Request) {
 }
     try {
       const questions = JSON.parse(text);
-      // console.log("Parsed questions:", questions);
+      console.log("Parsed questions:", questions);
   return new Response(JSON.stringify(questions), { status: 200 });
 } catch {
   return new Response(JSON.stringify({ error: "Failed to parse", raw: text }), { status: 500 });
 }
+}
+export async function PATCH(req: Request) {
+  const { id, questions } = await req.json();
+
+  if (!id || !questions) {
+    return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400 });
+  }
+
+  const result = await prisma.interviewSession.update({
+    where: { id },
+    data: { questions },
+  });
+
+  return new Response(JSON.stringify(result), { status: 200 });
 }

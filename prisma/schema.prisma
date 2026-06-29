@@ -24,6 +24,7 @@ model InterviewSession {
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role       String
+  questions  Json?
   company    String?
   level      String?
   type       String
