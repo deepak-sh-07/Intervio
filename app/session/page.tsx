@@ -133,7 +133,6 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   } else {
     // all questions answered
     console.log("Interview complete!");
-    // → trigger scoring here
   }
 }
    return (
