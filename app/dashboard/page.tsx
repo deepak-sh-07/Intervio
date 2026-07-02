@@ -346,8 +346,8 @@ export default function Dashboard() {
   });
   const res = await req.json();
 
-  setInterviews((prev) => [{ ...newInterview, id: res.id }, ...prev]);
-
+    setInterviews((prev) => [{ ...newInterview, id: res.id }, ...prev]);
+    // currid == interview id 
   localStorage.setItem("CurrId", res.id.toString());
   const id = localStorage.getItem("CurrId");
   console.log("Current ID stored in localStorage:", id);

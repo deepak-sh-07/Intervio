@@ -1,17 +1,20 @@
 "use client";
 import { useState, useEffect } from 'react';
-
+import { useRouter } from 'next/navigation';
 export default function SessionPage() {
-  const [sessionData, setSessionData] = useState(null);
+  const [sessionData, setSessionData] = useState<any>(null);
   const [qPrompt, setQPrompt] = useState("");
   const [questionCount, setQuestionCount] = useState(0);
   const [questions, setQuestions] = useState<{ id: number, question: string }[]>([]);
   const [answers, setAnswers] = useState<{ id: number, answer: string }[]>([]);
   const [currIndex,setCurrIndex] = useState(0)
   const [currQuestion, setCurrQuestion] = useState("");
-  const [ans,setAns] = useState("")
+  const [ans, setAns] = useState("")
+  const router = useRouter();
   const getQuestionCount = (duration: string) => {
-    const mins = parseInt(duration);
+    const mins = parseInt(duration.slice(0, 2), 10);
+    // console.log("THis")
+    
     if (mins <= 15) return 3;
     if (mins <= 30) return 6;
     if (mins <= 45) return 9;
@@ -51,14 +54,17 @@ export default function SessionPage() {
       const res = await fetch(`/api/auth/interview?id=${storedId}`);
       const data = await res.json();
       setSessionData(data);
-
+      // console.log(data);
+      const count = getQuestionCount(data.duration);
+      console.log(count);
+      setQuestionCount(count);
       if(data.questions && data.questions.length > 0) {
         setQuestions(data.questions);
         return;
       }
-
-      const count = getQuestionCount(data.duration);
-      setQuestionCount(count);
+      // console.log(data);
+      
+      
 
 //       const prompt = `
 // You are an expert technical interviewer. Generate ${count} interview questions for the following session:
@@ -124,8 +130,8 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   setAnswers((prev) => [...prev, { id: currIndex + 1, answer: ans }]);
   setAns(""); // clear input
 
-  const nextIndex = currIndex + 1;
-
+   const nextIndex = currIndex + 1;
+   console.log("NextIndex = ",nextIndex , "questioncount = " , questionCount)
   if (nextIndex < questionCount) {
     // move to next question
     setCurrIndex(nextIndex);
@@ -133,7 +139,51 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   } else {
     // all questions answered
     console.log("Interview complete!");
+    //verify answers
+    evaluate(answers);
+    console.log(answers)
   }
+  }
+  
+  async function evaluate(answers: any[]) {
+    if (!sessionData) return;
+  const scoringPrompt = `
+You are an expert interviewer. Evaluate each answer for this ${sessionData.type} interview.
+
+Role: ${sessionData.role}
+Difficulty: ${sessionData.difficulty}
+
+Questions and Answers:
+${answers.map((a, i) => `Q${i + 1}: ${questions[i].question}\nA${i + 1}: ${a.answer}`).join("\n\n")}
+
+Respond ONLY with a JSON array, no markdown, no extra text:
+[
+  { "id": 1, "score": 85, "feedback": "Good explanation but missed X..." },
+  { "id": 2, "score": 70, "feedback": "..." }
+]
+`;
+
+  const res = await fetch("/api/auth/score", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: scoringPrompt }),
+  });
+  const scores = await res.json();
+
+  const overallScore = Math.round(scores.reduce((sum: number, s: any) => sum + s.score, 0) / scores.length);
+
+  await fetch("/api/auth/score", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: localStorage.getItem("CurrId"),
+      scores,
+      overallScore,
+      answers,
+    }),
+  });
+
+  router.push("/results");
 }
    return (
     <div style={{ background: "#000", minHeight: "100vh", padding: "0", fontFamily: "sans-serif" }}>
@@ -196,7 +246,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
             ) : (
               <button onClick={submitAnswer}
                 style={{ padding: "10px 28px", borderRadius: "8px", fontSize: "15px", fontWeight: 500, cursor: "pointer", border: "0.5px solid #fff", background: "#fff", color: "#000" }}>
-                {currIndex === questionCount - 1 ? "Finish" : "Next →"}
+                Next
               </button>
             )}
           </div>
