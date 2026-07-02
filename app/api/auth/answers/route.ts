@@ -5,7 +5,7 @@ const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: Request) {
   const { prompt } = await req.json(); // only prompt needed
-
+  console.log("Received prompt for scoring:", prompt);
   const res = await client.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [{ role: "user", content: prompt }],
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
 
   try {
     const scores = JSON.parse(text);
+    console.log("Scores from Groq:", scores);
     return new Response(JSON.stringify(scores), { status: 200 });
   } catch {
     return new Response(JSON.stringify({ error: "Failed to parse", raw: text }), { status: 500 });

@@ -66,40 +66,17 @@ export default function SessionPage() {
       
       
 
-//       const prompt = `
-// You are an expert technical interviewer. Generate ${count} interview questions for the following session:
-
-// Role: ${data.role}
-// Company: ${data.company || "Not specified"}
-// Experience Level: ${data.level || "Not specified"}
-// Interview Type: ${data.type}
-// Difficulty: ${data.difficulty}
-// Skills to assess: ${data.skills.join(", ")}
-// Topics to cover: ${data.topics.join(", ")}
-// Additional focus: ${data.focus || "None"}
-
-// Rules:
-// - Questions should match the difficulty level
-// - Mix theory and practical questions
-// - Keep questions concise and clear
-
-// Respond ONLY with a JSON array, no markdown, no extra text:
-// [
-//   { "id": 1, "question": "..." },
-//   { "id": 2, "question": "..." }
-// ]
-      //       `;
       const prompt = `
-You are an expert technical interviewer. Generate 10 interview questions for the following session:
+You are an expert technical interviewer. Generate ${count} interview questions for the following session:
 
-Role: Software Engineer
-Company: Meta
-Experience Level: Beginner
-Interview Type: Technical
-Difficulty: Easy
-Skills to assess: JavaScript, React, Node.js
-Topics to cover: basic programming concepts, web development, problem-solving
-Additional focus:  "None"
+Role: ${data.role}
+Company: ${data.company || "Not specified"}
+Experience Level: ${data.level || "Not specified"}
+Interview Type: ${data.type}
+Difficulty: ${data.difficulty}
+Skills to assess: ${data.skills.join(", ")}
+Topics to cover: ${data.topics.join(", ")}
+Additional focus: ${data.focus || "None"}
 
 Rules:
 - Questions should match the difficulty level
@@ -111,7 +88,30 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   { "id": 1, "question": "..." },
   { "id": 2, "question": "..." }
 ]
-      `;
+            `;
+//       const prompt = `
+// You are an expert technical interviewer. Generate 10 interview questions for the following session:
+
+// Role: Software Engineer
+// Company: Meta
+// Experience Level: Beginner
+// Interview Type: Technical
+// Difficulty: Easy
+// Skills to assess: JavaScript, React, Node.js
+// Topics to cover: basic programming concepts, web development, problem-solving
+// Additional focus:  "None"
+
+// Rules:
+// - Questions should match the difficulty level
+// - Mix theory and practical questions
+// - Keep questions concise and clear
+
+// Respond ONLY with a JSON array, no markdown, no extra text:
+// [
+//   { "id": 1, "question": "..." },
+//   { "id": 2, "question": "..." }
+// ]
+//       `;
       setQPrompt(prompt);
       getQuestion(prompt);
     }
@@ -162,17 +162,22 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   { "id": 2, "score": 70, "feedback": "..." }
 ]
 `;
-
+  console.log("Scoring Prompt:", scoringPrompt);
   const res = await fetch("/api/auth/score", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt: scoringPrompt }),
   });
+    if (!res.ok) {
+  const err = await res.json();
+  console.error("Score API error:", err);
+  return;
+}
   const scores = await res.json();
 
   const overallScore = Math.round(scores.reduce((sum: number, s: any) => sum + s.score, 0) / scores.length);
 
-  await fetch("/api/auth/score", {
+  const result = await fetch("/api/auth/score", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -182,7 +187,11 @@ Respond ONLY with a JSON array, no markdown, no extra text:
       answers,
     }),
   });
-
+    if(!result.ok) {
+  const err = await result.json();
+  console.error("Score PATCH API error:", err);
+  return;
+}
   router.push("/results");
 }
    return (
