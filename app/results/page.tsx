@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-
+import { useSearchParams } from "next/navigation";
 interface ScoreItem {
   id: number;
   score: number;
@@ -33,10 +33,15 @@ export default function ResultsPage() {
   const [answers, setAnswers] = useState<AnswerItem[]>([]);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     async function fetchResults() {
-      const id = localStorage.getItem("CurrId");
+
+
+      const idFromUrl = searchParams.get("id");
+      const id = idFromUrl || localStorage.getItem("CurrId"); // params when u touch view from dashboard and localstorage when u are going to results after giving interview answers
+
       if (!id) return;
 
       const res = await fetch(`/api/auth/interview?id=${id}`);

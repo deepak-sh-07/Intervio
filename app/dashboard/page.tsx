@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo,useEffect } from "react";
 import { useRouter } from 'next/navigation';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Interview {
-  id: number;
+  id: string;
   role: string;
   company: string;
   level: string;        
@@ -32,21 +32,7 @@ interface NewSession {
   difficulty: Interview["difficulty"];
 }
 
-// ── Seed data ──────────────────────────────────────────────────────────────────
-const SEED: Interview[] = [
-  { id: 1, role: "Software Engineer", company: "Google", level: "Senior", focus: "Distributed systems", skills: ["Python", "System Design"], topics: ["Algorithms", "Scalability"], type: "Technical", difficulty: "Advanced", duration: "45 min", score: 88, status: "Completed", date: "Jun 24, 2026" },
-  { id: 2, role: "Product Manager", company: "Meta", level: "Mid level", focus: "Growth & monetization", skills: ["Product Sense", "Analytics"], topics: ["Go-to-market", "Metrics"], type: "Product / Case", difficulty: "Intermediate", duration: "30 min", score: 76, status: "Completed", date: "Jun 22, 2026" },
-  { id: 3, role: "Data Scientist", company: "Netflix", level: "Mid level", focus: "A/B testing & experimentation", skills: ["SQL", "Statistics"], topics: ["ML Concepts", "A/B Testing"], type: "Mixed", difficulty: "Intermediate", duration: "60 min", score: 61, status: "Completed", date: "Jun 20, 2026" },
-  { id: 4, role: "Frontend Engineer", company: "Stripe", level: "Mid level", focus: "Performance optimization", skills: ["React", "CSS", "TypeScript"], topics: ["Performance", "Accessibility"], type: "Technical", difficulty: "Intermediate", duration: "30 min", score: 91, status: "Completed", date: "Jun 18, 2026" },
-  { id: 5, role: "ML Engineer", company: "OpenAI", level: "Senior", focus: "LLM fine-tuning", skills: ["PyTorch", "MLOps"], topics: ["Model Deployment", "LLMs"], type: "Technical", difficulty: "Advanced", duration: "45 min", score: 70, status: "Completed", date: "Jun 15, 2026" },
-  { id: 6, role: "Software Engineer", company: "Amazon", level: "Senior", focus: "Concurrency & reliability", skills: ["Java", "Concurrency"], topics: ["Distributed Systems"], type: "Technical", difficulty: "Advanced", duration: "60 min", score: 55, status: "Completed", date: "Jun 12, 2026" },
-  { id: 7, role: "Product Manager", company: "Airbnb", level: "Mid level", focus: "Prioritization frameworks", skills: ["Roadmapping", "Metrics"], topics: ["Prioritization", "Behavioral"], type: "Behavioral", difficulty: "Intermediate", duration: "30 min", score: 82, status: "Completed", date: "Jun 10, 2026" },
-  { id: 8, role: "Software Engineer", company: "", level: "Entry level", focus: "", skills: ["Python", "APIs"], topics: ["Algorithms", "REST"], type: "Technical", difficulty: "Beginner", duration: "45 min", score: 0, status: "In Progress", date: "Jun 9, 2026" },
-  { id: 9, role: "Data Scientist", company: "Spotify", level: "Mid level", focus: "Experimentation design", skills: ["R", "Visualization"], topics: ["Experimentation"], type: "Mixed", difficulty: "Intermediate", duration: "45 min", score: 68, status: "Completed", date: "Jun 6, 2026" },
-  { id: 10, role: "Frontend Engineer", company: "", level: "Entry level", focus: "", skills: ["TypeScript", "Testing"], topics: ["Component Design"], type: "Technical", difficulty: "Beginner", duration: "15 min", score: 0, status: "Abandoned", date: "Jun 3, 2026" },
-  { id: 11, role: "ML Engineer", company: "Anthropic", level: "Senior", focus: "Transformers & NLP", skills: ["Python", "NLP"], topics: ["Transformers", "Fine-tuning"], type: "Technical", difficulty: "Advanced", duration: "60 min", score: 85, status: "Completed", date: "May 30, 2026" },
-  { id: 12, role: "Software Engineer", company: "Figma", level: "Mid level", focus: "System design & culture", skills: ["Go", "Concurrency"], topics: ["System Design", "Behavioral"], type: "Mixed", difficulty: "Intermediate", duration: "60 min", score: 72, status: "Completed", date: "May 27, 2026" },
-];
+
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function scoreColor(s: number) {
@@ -298,15 +284,16 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
 // ── Main dashboard ─────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const router = useRouter();
-  const [interviews, setInterviews] = useState<Interview[]>(SEED);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
   const [roleFilter, setRoleFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [activeNav, setActiveNav] = useState("Dashboard");
 
-  const uniqueRoles = useMemo(() => [...new Set(SEED.map((i) => i.role))], []);
-
+  const uniqueRoles = useMemo(() => [...new Set(interviews.map((i) => i.role))], [interviews]);
+  
   const filtered = useMemo(() => interviews.filter((r) => {
     const q = search.toLowerCase();
     const matchQ = !q || r.role.toLowerCase().includes(q) || r.company.toLowerCase().includes(q) || r.skills.join(" ").toLowerCase().includes(q) || r.topics.join(" ").toLowerCase().includes(q);
@@ -321,6 +308,41 @@ export default function Dashboard() {
     const hours = interviews.reduce((s, i) => s + parseInt(i.duration), 0) / 60;
     return { total: interviews.length, avg, hours: hours.toFixed(1), roles: new Set(interviews.map((i) => i.role)).size };
   }, [interviews]);
+
+  useEffect(() => {
+    async function loadSessions() {
+      try {
+        const res = await fetch("/api/auth/interview"); // no id → returns list
+        const data = await res.json();
+        const mapped: Interview[] = data.map((s: any) => ({
+          id: s.id,
+          role: s.role,
+          company: s.company || "",
+          level: s.level || "",
+          focus: s.focus || "",
+          skills: s.skills || [],
+          topics: s.topics || [],
+          type: s.type,
+          difficulty: s.difficulty,
+          duration: s.duration,
+          score: s.score,
+          status: s.status,
+          date: new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        }));
+        setInterviews(mapped);
+      } catch (err) {
+        console.error("Failed to load sessions:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSessions();
+  }, []);
+
+  async function handleDelete(id: string) {
+  await fetch(`/api/auth/interview?id=${id}`, { method: "DELETE" });
+  setInterviews((prev) => prev.filter((x) => x.id !== id));
+}
 
   async function handleCreate(s: NewSession) {
   const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -477,10 +499,14 @@ export default function Dashboard() {
                       <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">{row.date}</td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 text-sm transition-colors" title="View">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                          </button>
-                          <button onClick={() => setInterviews((prev) => prev.filter((x) => x.id !== row.id))}
+                          <button onClick={() => router.push(`/results?id=${row.id}`)}
+  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 text-sm transition-colors" title="View">
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+  </svg>
+</button>
+                          <button onClick={() => handleDelete(row.id)}
                             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>

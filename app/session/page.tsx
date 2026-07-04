@@ -126,24 +126,21 @@ Respond ONLY with a JSON array, no markdown, no extra text:
  const submitAnswer = () => {
   if (!ans.trim()) return;
 
-  // save answer
-  setAnswers((prev) => [...prev, { id: currIndex + 1, answer: ans }]);
-  setAns(""); // clear input
+  const updatedAnswers = [...answers, { id: currIndex + 1, answer: ans }];
+  setAnswers(updatedAnswers);
+  setAns("");
 
-   const nextIndex = currIndex + 1;
-   console.log("NextIndex = ",nextIndex , "questioncount = " , questionCount)
+  const nextIndex = currIndex + 1;
+  console.log("NextIndex = ", nextIndex, "questioncount = ", questionCount);
+
   if (nextIndex < questionCount) {
-    // move to next question
     setCurrIndex(nextIndex);
     setCurrQuestion(questions[nextIndex].question);
   } else {
-    // all questions answered
     console.log("Interview complete!");
-    //verify answers
-    evaluate(answers);
-    console.log(answers)
+    evaluate(updatedAnswers); 
   }
-  }
+}
   
   async function evaluate(answers: any[]) {
     if (!sessionData) return;
@@ -163,7 +160,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
 ]
 `;
   console.log("Scoring Prompt:", scoringPrompt);
-  const res = await fetch("/api/auth/score", {
+  const res = await fetch("/api/auth/answers", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt: scoringPrompt }),
@@ -177,7 +174,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
 
   const overallScore = Math.round(scores.reduce((sum: number, s: any) => sum + s.score, 0) / scores.length);
 
-  const result = await fetch("/api/auth/score", {
+  const result = await fetch("/api/auth/answers", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -187,8 +184,13 @@ Respond ONLY with a JSON array, no markdown, no extra text:
       answers,
     }),
   });
-    if(!result.ok) {
-  const err = await result.json();
+if (!result.ok) {
+  let err;
+  try {
+    err = await result.json();
+  } catch {
+    err = await result.text();
+  }
   console.error("Score PATCH API error:", err);
   return;
 }

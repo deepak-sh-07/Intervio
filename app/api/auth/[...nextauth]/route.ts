@@ -1,90 +1,56 @@
-import NextAuth from "next-auth";
+// app/api/auth/[...nextauth]/route.ts
+import NextAuth, { NextAuthOptions } from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
-import bcrypt from "bcrypt";
 
-export const authOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
     CredentialsProvider({
       name: "Credentials",
-
       credentials: {
-        email: {
-          label: "Email",
-          type: "email",
-          placeholder: "deepak@gmail.com",
-        },
-        password: {
-          label: "Password",
-          type: "password",
-        },
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
-
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing email or password");
-        }
+        if (!credentials?.email || !credentials?.password) return null;
 
-        // Find user
         const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email,
-          },
+          where: { email: credentials.email },
         });
+        if (!user || !user.password) return null;
 
-        if (!user) {
-          throw new Error("User not found");
-        }
+        const valid = await bcrypt.compare(credentials.password, user.password);
+        if (!valid) return null;
 
-        // Compare password
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        );
-
-        if (!isPasswordValid) {
-          throw new Error("Invalid password");
-        }
-
-        // Return the user object
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-        };
+        return { id: user.id, email: user.email, name: user.name };
       },
     }),
   ],
-
   session: {
-    strategy: "jwt",
+    strategy: "jwt",            // required for Credentials provider
+    maxAge: 30 * 24 * 60 * 60,  // 30 days — stays logged in
   },
-
-  pages: {
-    signIn: "/login",
-  },
-
+  secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-
+      if (user) token.id = user.id;
       return token;
     },
-
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-
+      if (session.user) (session.user as any).id = token.id;
       return session;
     },
   },
-
-  secret: process.env.NEXTAUTH_SECRET,
+  pages: {
+    signIn: "/login", // optional custom login page
+  },
 };
 
 const handler = NextAuth(authOptions);
-
 export { handler as GET, handler as POST };
