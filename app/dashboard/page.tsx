@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useMemo,useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from 'next/navigation';
-
+import { useSession } from "next-auth/react";
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Interview {
   id: string;
   role: string;
   company: string;
-  level: string;        
-  focus: string; 
+  level: string;
+  focus: string;
   skills: string[];
   topics: string[];
   type: "Technical" | "Behavioral" | "Product / Case" | "Mixed";
@@ -148,7 +148,7 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
     onCreate({ ...form });
     setForm({ ...BLANK });
     onClose();
-    
+
   }
 
   if (!open) return null;
@@ -177,7 +177,7 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
                 <input value={form.role} onChange={(e) => set("role", e.target.value)}
                   placeholder="e.g. Software Engineer"
                   className={`w-full px-3 py-2 text-sm border rounded-lg outline-none transition-all bg-white ${roleErr ? "border-red-400 ring-2 ring-red-50" : "border-gray-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50"}`} />
-                
+
                 {roleErr && <p className="text-xs text-red-500 mt-1">Role is required.</p>}
               </div>
               <div>
@@ -292,8 +292,9 @@ export default function Dashboard() {
   const [typeFilter, setTypeFilter] = useState("");
   const [activeNav, setActiveNav] = useState("Dashboard");
 
+  const { data: session, status } = useSession();
   const uniqueRoles = useMemo(() => [...new Set(interviews.map((i) => i.role))], [interviews]);
-  
+
   const filtered = useMemo(() => interviews.filter((r) => {
     const q = search.toLowerCase();
     const matchQ = !q || r.role.toLowerCase().includes(q) || r.company.toLowerCase().includes(q) || r.skills.join(" ").toLowerCase().includes(q) || r.topics.join(" ").toLowerCase().includes(q);
@@ -308,6 +309,9 @@ export default function Dashboard() {
     const hours = interviews.reduce((s, i) => s + parseInt(i.duration), 0) / 60;
     return { total: interviews.length, avg, hours: hours.toFixed(1), roles: new Set(interviews.map((i) => i.role)).size };
   }, [interviews]);
+  useEffect(() => {
+    if (status === "unauthenticated") router.push("/login");
+  }, [status]);
 
   useEffect(() => {
     async function loadSessions() {
@@ -339,43 +343,46 @@ export default function Dashboard() {
     loadSessions();
   }, []);
 
+  if (status === "loading") return <p>Loading…</p>;
+  if (!session) return null;
+
   async function handleDelete(id: string) {
-  await fetch(`/api/auth/interview?id=${id}`, { method: "DELETE" });
-  setInterviews((prev) => prev.filter((x) => x.id !== id));
-}
+    await fetch(`/api/auth/interview?id=${id}`, { method: "DELETE" });
+    setInterviews((prev) => prev.filter((x) => x.id !== id));
+  }
 
   async function handleCreate(s: NewSession) {
-  const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const newInterview = {
-    role: s.role,
-    company: s.company,
-    level: s.level,
-    focus: s.focus,
-    skills: s.skills.length ? s.skills : ["General"],
-    topics: s.topics.length ? s.topics : ["General"],
-    type: s.type,
-    difficulty: s.difficulty,
-    duration: s.duration,
-    score: 0,
-    status: "In Progress" as const,
-    date: now,
-  };
+    const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const newInterview = {
+      role: s.role,
+      company: s.company,
+      level: s.level,
+      focus: s.focus,
+      skills: s.skills.length ? s.skills : ["General"],
+      topics: s.topics.length ? s.topics : ["General"],
+      type: s.type,
+      difficulty: s.difficulty,
+      duration: s.duration,
+      score: 0,
+      status: "In Progress" as const,
+      date: now,
+    };
 
-  const req = await fetch("/api/auth/interview", {
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-    body: JSON.stringify(newInterview),
-  });
-  const res = await req.json();
+    const req = await fetch("/api/auth/interview", {
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+      body: JSON.stringify(newInterview),
+    });
+    const res = await req.json();
 
     setInterviews((prev) => [{ ...newInterview, id: res.id }, ...prev]);
     // currid == interview id 
-  localStorage.setItem("CurrId", res.id.toString());
-  const id = localStorage.getItem("CurrId");
-  console.log("Current ID stored in localStorage:", id);
-  console.log(res);
-  router.push("/session");
-}
+    localStorage.setItem("CurrId", res.id.toString());
+    const id = localStorage.getItem("CurrId");
+    console.log("Current ID stored in localStorage:", id);
+    console.log(res);
+    router.push("/session");
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans overflow-hidden">
@@ -395,8 +402,10 @@ export default function Dashboard() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold">AK</div>
-          <span className="text-sm text-gray-500">Arjun K.</span>
+          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold">
+            {initials(session.user?.name || session.user?.email || "U")}
+          </div>
+          <span className="text-sm text-gray-500">{session.user?.name || session.user?.email}</span>
         </div>
       </header>
 
@@ -500,12 +509,12 @@ export default function Dashboard() {
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => router.push(`/results?id=${row.id}`)}
-  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 text-sm transition-colors" title="View">
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-  </svg>
-</button>
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 text-sm transition-colors" title="View">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
                           <button onClick={() => handleDelete(row.id)}
                             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>

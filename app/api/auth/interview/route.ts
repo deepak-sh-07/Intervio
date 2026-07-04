@@ -1,6 +1,13 @@
 import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export async function POST(req: Request) {
+  const authSession = await getServerSession(authOptions);
+  if (!authSession?.user?.email) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+
   const data = await req.json();
   if (!data.role || !data.skills || !data.topics || !data.type || !data.difficulty || !data.duration) {
     return new Response(JSON.stringify("Missing required fields"), { status: 400 });
@@ -20,7 +27,7 @@ export async function POST(req: Request) {
       status: "In Progress",
       createdAt: new Date().toISOString(),
       user: {
-        connect: { email: "test@gmail.com" },
+        connect: { email: authSession.user.email },
       },
     }
   });
@@ -33,6 +40,11 @@ export async function GET(req: Request) {
 
   // Single session (used by /session and /results pages)
   if (id) {
+    const authSession = await getServerSession(authOptions);
+    if (!authSession?.user?.email) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    }
+
     const session = await prisma.interviewSession.findUnique({
       where: { id },
     });
@@ -40,13 +52,24 @@ export async function GET(req: Request) {
     if (!session) {
       return new Response(JSON.stringify({ error: "Session not found" }), { status: 404 });
     }
+
+    const user = await prisma.user.findUnique({ where: { email: authSession.user.email } });
+    if (!user || session.userId !== user.id) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    }
+
     return new Response(JSON.stringify(session), { status: 200 });
   }
 
   // No id → list all sessions (used by /dashboard)
+  const authSession = await getServerSession(authOptions);
+  if (!authSession?.user?.email) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+
   const sessions = await prisma.interviewSession.findMany({
     where: {
-      user: { email: "test@gmail.com" }, // right now hardcoded
+      user: { email: authSession.user.email },
     },
     orderBy: { createdAt: "desc" },
     select: {
@@ -68,11 +91,27 @@ export async function GET(req: Request) {
 
   return new Response(JSON.stringify(sessions), { status: 200 });
 }
+
 // add to app/api/auth/interview/route.ts
 export async function DELETE(req: Request) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return new Response(JSON.stringify({ error: "Missing id" }), { status: 400 });
+
+  const authSession = await getServerSession(authOptions);
+  if (!authSession?.user?.email) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+
+  const session = await prisma.interviewSession.findUnique({ where: { id } });
+  if (!session) {
+    return new Response(JSON.stringify({ error: "Session not found" }), { status: 404 });
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: authSession.user.email } });
+  if (!user || session.userId !== user.id) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+  }
 
   await prisma.interviewSession.delete({ where: { id } });
   return new Response(JSON.stringify({ success: true }), { status: 200 });

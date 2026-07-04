@@ -1,20 +1,22 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from "next-auth/react";
 export default function SessionPage() {
   const [sessionData, setSessionData] = useState<any>(null);
   const [qPrompt, setQPrompt] = useState("");
   const [questionCount, setQuestionCount] = useState(0);
   const [questions, setQuestions] = useState<{ id: number, question: string }[]>([]);
   const [answers, setAnswers] = useState<{ id: number, answer: string }[]>([]);
-  const [currIndex,setCurrIndex] = useState(0)
+  const [currIndex, setCurrIndex] = useState(0)
   const [currQuestion, setCurrQuestion] = useState("");
   const [ans, setAns] = useState("")
+  const { data: session, status } = useSession();
   const router = useRouter();
   const getQuestionCount = (duration: string) => {
     const mins = parseInt(duration.slice(0, 2), 10);
     // console.log("THis")
-    
+
     if (mins <= 15) return 3;
     if (mins <= 30) return 6;
     if (mins <= 45) return 9;
@@ -27,14 +29,14 @@ export default function SessionPage() {
     const res = await fetch("/api/auth/questions", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id:storedId,questions:questions }),
+      body: JSON.stringify({ id: storedId, questions: questions }),
     })
   }
 
   async function getQuestion(prompt?: string) { // create questions 
     // console.log("Prompt to send:", prompt || qPrompt);
     const finalPrompt = prompt || qPrompt;
-    if(!finalPrompt) return;
+    if (!finalPrompt) return;
     const res = await fetch("/api/auth/questions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -45,6 +47,12 @@ export default function SessionPage() {
     // console.log("Generated Questions:", data);
     saveQuestionsToDB(data);
   }
+
+  useEffect(() => {
+    if (status === "unauthenticated") router.push("/login");
+  }, [status]);
+
+  
 
   useEffect(() => {
     async function fetchAndPrepare() {
@@ -58,13 +66,13 @@ export default function SessionPage() {
       const count = getQuestionCount(data.duration);
       console.log(count);
       setQuestionCount(count);
-      if(data.questions && data.questions.length > 0) {
+      if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions);
         return;
       }
       // console.log(data);
-      
-      
+
+
 
       const prompt = `
 You are an expert technical interviewer. Generate ${count} interview questions for the following session:
@@ -89,66 +97,78 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   { "id": 2, "question": "..." }
 ]
             `;
-//       const prompt = `
-// You are an expert technical interviewer. Generate 10 interview questions for the following session:
+      //       const prompt = `
+      // You are an expert technical interviewer. Generate 10 interview questions for the following session:
 
-// Role: Software Engineer
-// Company: Meta
-// Experience Level: Beginner
-// Interview Type: Technical
-// Difficulty: Easy
-// Skills to assess: JavaScript, React, Node.js
-// Topics to cover: basic programming concepts, web development, problem-solving
-// Additional focus:  "None"
+      // Role: Software Engineer
+      // Company: Meta
+      // Experience Level: Beginner
+      // Interview Type: Technical
+      // Difficulty: Easy
+      // Skills to assess: JavaScript, React, Node.js
+      // Topics to cover: basic programming concepts, web development, problem-solving
+      // Additional focus:  "None"
 
-// Rules:
-// - Questions should match the difficulty level
-// - Mix theory and practical questions
-// - Keep questions concise and clear
+      // Rules:
+      // - Questions should match the difficulty level
+      // - Mix theory and practical questions
+      // - Keep questions concise and clear
 
-// Respond ONLY with a JSON array, no markdown, no extra text:
-// [
-//   { "id": 1, "question": "..." },
-//   { "id": 2, "question": "..." }
-// ]
-//       `;
+      // Respond ONLY with a JSON array, no markdown, no extra text:
+      // [
+      //   { "id": 1, "question": "..." },
+      //   { "id": 2, "question": "..." }
+      // ]
+      //       `;
       setQPrompt(prompt);
       getQuestion(prompt);
     }
-    
+
     fetchAndPrepare();
   }, []);
 
+  if (status === "loading") return <p>Loading…</p>;
+  if (!session) return null;
+
   const startInterview = () => {
-  setCurrIndex(0);
-  setCurrQuestion(questions[0].question);
-}
- const submitAnswer = () => {
-  if (!ans.trim()) return;
-
-  const updatedAnswers = [...answers, { id: currIndex + 1, answer: ans }];
-  setAnswers(updatedAnswers);
-  setAns("");
-
-  const nextIndex = currIndex + 1;
-  console.log("NextIndex = ", nextIndex, "questioncount = ", questionCount);
-
-  if (nextIndex < questionCount) {
-    setCurrIndex(nextIndex);
-    setCurrQuestion(questions[nextIndex].question);
-  } else {
-    console.log("Interview complete!");
-    evaluate(updatedAnswers); 
+    setCurrIndex(0);
+    setCurrQuestion(questions[0].question);
   }
-}
-  
+  const submitAnswer = () => {
+    if (!ans.trim()) return;
+    const trimmed = ans.trim();
+  if (trimmed.length < 15) {  // reject too-short/placeholder answers
+    alert("Please provide a more complete answer before continuing.");
+    return;
+  }
+    const updatedAnswers = [...answers, { id: currIndex + 1, answer: ans }];
+    setAnswers(updatedAnswers);
+    setAns("");
+
+    const nextIndex = currIndex + 1;
+    console.log("NextIndex = ", nextIndex, "questioncount = ", questionCount);
+
+    if (nextIndex < questionCount) {
+      setCurrIndex(nextIndex);
+      setCurrQuestion(questions[nextIndex].question);
+    } else {
+      console.log("Interview complete!");
+      evaluate(updatedAnswers);
+    }
+  }
+
   async function evaluate(answers: any[]) {
     if (!sessionData) return;
-  const scoringPrompt = `
+    const scoringPrompt = `
 You are an expert interviewer. Evaluate each answer for this ${sessionData.type} interview.
 
 Role: ${sessionData.role}
 Difficulty: ${sessionData.difficulty}
+
+Scoring rules:
+- If an answer is blank, "..", a placeholder, unrelated to the question, or shows no genuine attempt to answer, score it 0 and say so in the feedback.
+- Do not give credit for effort, length, or confident tone alone — score only the technical correctness and completeness of the actual content.
+- Be strict and realistic, as a real technical interviewer would be.
 
 Questions and Answers:
 ${answers.map((a, i) => `Q${i + 1}: ${questions[i].question}\nA${i + 1}: ${a.answer}`).join("\n\n")}
@@ -159,44 +179,44 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   { "id": 2, "score": 70, "feedback": "..." }
 ]
 `;
-  console.log("Scoring Prompt:", scoringPrompt);
-  const res = await fetch("/api/auth/answers", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: scoringPrompt }),
-  });
+    console.log("Scoring Prompt:", scoringPrompt);
+    const res = await fetch("/api/auth/answers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: scoringPrompt }),
+    });
     if (!res.ok) {
-  const err = await res.json();
-  console.error("Score API error:", err);
-  return;
-}
-  const scores = await res.json();
+      const err = await res.json();
+      console.error("Score API error:", err);
+      return;
+    }
+    const scores = await res.json();
 
-  const overallScore = Math.round(scores.reduce((sum: number, s: any) => sum + s.score, 0) / scores.length);
+    const overallScore = Math.round(scores.reduce((sum: number, s: any) => sum + s.score, 0) / scores.length);
 
-  const result = await fetch("/api/auth/answers", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: localStorage.getItem("CurrId"),
-      scores,
-      overallScore,
-      answers,
-    }),
-  });
-if (!result.ok) {
-  let err;
-  try {
-    err = await result.json();
-  } catch {
-    err = await result.text();
+    const result = await fetch("/api/auth/answers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: localStorage.getItem("CurrId"),
+        scores,
+        overallScore,
+        answers,
+      }),
+    });
+    if (!result.ok) {
+      let err;
+      try {
+        err = await result.json();
+      } catch {
+        err = await result.text();
+      }
+      console.error("Score PATCH API error:", err);
+      return;
+    }
+    router.push("/results");
   }
-  console.error("Score PATCH API error:", err);
-  return;
-}
-  router.push("/results");
-}
-   return (
+  return (
     <div style={{ background: "#000", minHeight: "100vh", padding: "0", fontFamily: "sans-serif" }}>
       <div style={{ maxWidth: "720px", margin: "0 auto", padding: "2.5rem 2rem" }}>
 
