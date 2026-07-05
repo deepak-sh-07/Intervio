@@ -6,7 +6,7 @@ export default function SessionPage() {
   const [sessionData, setSessionData] = useState<any>(null);
   const [qPrompt, setQPrompt] = useState("");
   const [questionCount, setQuestionCount] = useState(0);
-  const [questions, setQuestions] = useState<{ id: number, question: string }[]>([]);
+  const [questions, setQuestions] = useState<{ id: number, question: string, topic?: string }[]>([]);
   const [answers, setAnswers] = useState<{ id: number, answer: string }[]>([]);
   const [currIndex, setCurrIndex] = useState(0)
   const [currQuestion, setCurrQuestion] = useState("");
@@ -33,47 +33,44 @@ export default function SessionPage() {
     })
   }
 
-  async function getQuestion(prompt?: string) { // create questions 
-    // console.log("Prompt to send:", prompt || qPrompt);
-    const finalPrompt = prompt || qPrompt;
-    if (!finalPrompt) return;
-    const res = await fetch("/api/auth/questions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: finalPrompt }),
-    });
-    const data = await res.json();
-    setQuestions(data);
-    // console.log("Generated Questions:", data);
-    saveQuestionsToDB(data);
-  }
+  async function getQuestion(prompt?: string) { // create questions
+  const finalPrompt = prompt || qPrompt;
+  if (!finalPrompt) return;
+  const res = await fetch("/api/auth/questions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: finalPrompt }),
+  });
+  const data = await res.json();
+  setQuestions(data);
+  saveQuestionsToDB(data);
+  return data; // ⬅️ add this
+}
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
-  }, [status]);
+  }, [status, router]);
 
   
 
   useEffect(() => {
-    async function fetchAndPrepare() {
-      const storedId = localStorage.getItem("CurrId");
-      if (!storedId) return;
+  async function fetchAndPrepare() {
+    if (status !== "authenticated") return;
 
-      const res = await fetch(`/api/auth/interview?id=${storedId}`);
-      const data = await res.json();
-      setSessionData(data);
-      // console.log(data);
-      const count = getQuestionCount(data.duration);
-      console.log(count);
-      setQuestionCount(count);
-      if (data.questions && data.questions.length > 0) {
-        setQuestions(data.questions);
-        return;
-      }
-      // console.log(data);
+    const storedId = localStorage.getItem("CurrId");
+    if (!storedId) return;
 
+    const res = await fetch(`/api/auth/interview?id=${storedId}`);
+    const data = await res.json();
+    setSessionData(data);
+    const count = getQuestionCount(data.duration);
+    setQuestionCount(count);
 
+    let loadedQuestions = data.questions;
 
+    if (data.questions && data.questions.length > 0) {
+      setQuestions(data.questions);
+    } else {
       const prompt = `
 You are an expert technical interviewer. Generate ${count} interview questions for the following session:
 
@@ -90,42 +87,39 @@ Rules:
 - Questions should match the difficulty level
 - Mix theory and practical questions
 - Keep questions concise and clear
+- Each question must be tagged with exactly one specific topic it tests (e.g. "React Hooks", "SQL Joins", "Big-O Complexity") — be precise, not generic like "Programming"
 
 Respond ONLY with a JSON array, no markdown, no extra text:
 [
-  { "id": 1, "question": "..." },
-  { "id": 2, "question": "..." }
+  { "id": 1, "question": "...", "topic": "..." },
+  { "id": 2, "question": "...", "topic": "..." }
 ]
-            `;
-      //       const prompt = `
-      // You are an expert technical interviewer. Generate 10 interview questions for the following session:
-
-      // Role: Software Engineer
-      // Company: Meta
-      // Experience Level: Beginner
-      // Interview Type: Technical
-      // Difficulty: Easy
-      // Skills to assess: JavaScript, React, Node.js
-      // Topics to cover: basic programming concepts, web development, problem-solving
-      // Additional focus:  "None"
-
-      // Rules:
-      // - Questions should match the difficulty level
-      // - Mix theory and practical questions
-      // - Keep questions concise and clear
-
-      // Respond ONLY with a JSON array, no markdown, no extra text:
-      // [
-      //   { "id": 1, "question": "..." },
-      //   { "id": 2, "question": "..." }
-      // ]
-      //       `;
+`;
       setQPrompt(prompt);
-      getQuestion(prompt);
+      await getQuestion(prompt); // awaited so we can use the result below
     }
 
-    fetchAndPrepare();
-  }, []);
+    // restore progress if this session has saved, incomplete answers
+    if (data.answers && data.status !== "Completed") {
+      try {
+        const savedAnswers = JSON.parse(data.answers);
+        if (Array.isArray(savedAnswers) && savedAnswers.length > 0 && savedAnswers.length < count) {
+          setAnswers(savedAnswers);
+          const resumeIndex = savedAnswers.length;
+          setCurrIndex(resumeIndex);
+          const qs = loadedQuestions?.length ? loadedQuestions : questions;
+          if (qs && qs[resumeIndex]) {
+            setCurrQuestion(qs[resumeIndex].question);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse saved answers:", e);
+      }
+    }
+  }
+
+  fetchAndPrepare();
+}, [status]);
 
   if (status === "loading") return <p>Loading…</p>;
   if (!session) return null;
@@ -135,27 +129,36 @@ Respond ONLY with a JSON array, no markdown, no extra text:
     setCurrQuestion(questions[0].question);
   }
   const submitAnswer = () => {
-    if (!ans.trim()) return;
-    const trimmed = ans.trim();
+  const trimmed = ans.trim();
   if (trimmed.length < 15) {  // reject too-short/placeholder answers
     alert("Please provide a more complete answer before continuing.");
     return;
   }
-    const updatedAnswers = [...answers, { id: currIndex + 1, answer: ans }];
-    setAnswers(updatedAnswers);
-    setAns("");
+  const updatedAnswers = [...answers, { id: currIndex + 1, answer: ans }];
+  setAnswers(updatedAnswers);
+  setAns("");
 
-    const nextIndex = currIndex + 1;
-    console.log("NextIndex = ", nextIndex, "questioncount = ", questionCount);
-
-    if (nextIndex < questionCount) {
-      setCurrIndex(nextIndex);
-      setCurrQuestion(questions[nextIndex].question);
-    } else {
-      console.log("Interview complete!");
-      evaluate(updatedAnswers);
-    }
+  // save progress to DB so refresh doesn't lose it
+  const storedId = localStorage.getItem("CurrId");
+  if (storedId) {
+    fetch("/api/auth/answers", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: storedId, answers: updatedAnswers }),
+    }).catch((err) => console.error("Failed to save progress:", err));
   }
+
+  const nextIndex = currIndex + 1;
+  console.log("NextIndex = ", nextIndex, "questioncount = ", questionCount);
+
+  if (nextIndex < questionCount) {
+    setCurrIndex(nextIndex);
+    setCurrQuestion(questions[nextIndex].question);
+  } else {
+    console.log("Interview complete!");
+    evaluate(updatedAnswers);
+  }
+}
 
   async function evaluate(answers: any[]) {
     if (!sessionData) return;
@@ -171,14 +174,15 @@ Scoring rules:
 - Be strict and realistic, as a real technical interviewer would be.
 
 Questions and Answers:
-${answers.map((a, i) => `Q${i + 1}: ${questions[i].question}\nA${i + 1}: ${a.answer}`).join("\n\n")}
+${answers.map((a, i) => `Q${i + 1} [Topic: ${questions[i].topic || "General"}]: ${questions[i].question}\nA${i + 1}: ${a.answer}`).join("\n\n")}
 
 Respond ONLY with a JSON array, no markdown, no extra text:
 [
-  { "id": 1, "score": 85, "feedback": "Good explanation but missed X..." },
-  { "id": 2, "score": 70, "feedback": "..." }
+  { "id": 1, "topic": "...", "score": 85, "feedback": "Good explanation but missed X..." },
+  { "id": 2, "topic": "...", "score": 70, "feedback": "..." }
 ]
 `;
+
     console.log("Scoring Prompt:", scoringPrompt);
     const res = await fetch("/api/auth/answers", {
       method: "POST",

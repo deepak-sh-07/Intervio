@@ -60,3 +60,34 @@ export async function PATCH(req: Request) {
 
   return new Response(JSON.stringify(result), { status: 200 });
 }
+
+// Incremental save — called after every answer during the interview,
+// so progress isn't lost on refresh. Does NOT touch score/status/feedback.
+export async function PUT(req: Request) {
+  const authSession = await getServerSession(authOptions);
+  if (!authSession?.user?.email) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+
+  const { id, answers } = await req.json();
+  if (!id || !answers) {
+    return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400 });
+  }
+
+  const target = await prisma.interviewSession.findUnique({ where: { id } });
+  if (!target) {
+    return new Response(JSON.stringify({ error: "Session not found" }), { status: 404 });
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: authSession.user.email } });
+  if (!user || target.userId !== user.id) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+  }
+
+  const result = await prisma.interviewSession.update({
+    where: { id },
+    data: { answers: JSON.stringify(answers) },
+  });
+
+  return new Response(JSON.stringify(result), { status: 200 });
+}

@@ -285,6 +285,7 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
 export default function Dashboard() {
   const router = useRouter();
   const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [weakTopics, setWeakTopics] = useState<{ topic: string; avgScore: number; questionsAnswered: number }[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -295,6 +296,20 @@ export default function Dashboard() {
   const { data: session, status } = useSession();
   const uniqueRoles = useMemo(() => [...new Set(interviews.map((i) => i.role))], [interviews]);
 
+  useEffect(() => {
+  async function loadWeakTopics() {
+    if (status !== "authenticated") return;
+    try {
+      const res = await fetch("/api/auth/weak-topics");
+      if (!res.ok) return;
+      const data = await res.json();
+      setWeakTopics(data.weakTopics || []);
+    } catch (err) {
+      console.error("Failed to load weak topics:", err);
+    }
+  }
+  loadWeakTopics();
+}, [status]);
   const filtered = useMemo(() => interviews.filter((r) => {
     const q = search.toLowerCase();
     const matchQ = !q || r.role.toLowerCase().includes(q) || r.company.toLowerCase().includes(q) || r.skills.join(" ").toLowerCase().includes(q) || r.topics.join(" ").toLowerCase().includes(q);
@@ -314,34 +329,41 @@ export default function Dashboard() {
   }, [status]);
 
   useEffect(() => {
-    async function loadSessions() {
-      try {
-        const res = await fetch("/api/auth/interview"); // no id → returns list
-        const data = await res.json();
-        const mapped: Interview[] = data.map((s: any) => ({
-          id: s.id,
-          role: s.role,
-          company: s.company || "",
-          level: s.level || "",
-          focus: s.focus || "",
-          skills: s.skills || [],
-          topics: s.topics || [],
-          type: s.type,
-          difficulty: s.difficulty,
-          duration: s.duration,
-          score: s.score,
-          status: s.status,
-          date: new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        }));
-        setInterviews(mapped);
-      } catch (err) {
-        console.error("Failed to load sessions:", err);
-      } finally {
-        setLoading(false);
+  async function loadSessions() {
+    if (status !== "authenticated") return;
+
+    try {
+      const res = await fetch("/api/auth/interview");
+      if (!res.ok) {
+        console.warn("Could not load sessions:", res.status);
+        setInterviews([]);   // ⬅️ don't attempt to .map() an error object
+        return;
       }
+      const data = await res.json();
+      const mapped: Interview[] = data.map((s: any) => ({
+        id: s.id,
+        role: s.role,
+        company: s.company || "",
+        level: s.level || "",
+        focus: s.focus || "",
+        skills: s.skills || [],
+        topics: s.topics || [],
+        type: s.type,
+        difficulty: s.difficulty,
+        duration: s.duration,
+        score: s.score,
+        status: s.status,
+        date: new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      }));
+      setInterviews(mapped);
+    } catch (err) {
+      console.error("Failed to load sessions:", err);
+    } finally {
+      setLoading(false);
     }
-    loadSessions();
-  }, []);
+  }
+  loadSessions();
+}, [status]);
 
   if (status === "loading") return <p>Loading…</p>;
   if (!session) return null;
@@ -427,7 +449,32 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
-
+        {/* Weak topics */}
+{weakTopics.length > 0 && (
+  <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 flex-shrink-0">
+    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Weak topics</p>
+    <div className="flex flex-col gap-2">
+      {weakTopics.slice(0, 5).map((t) => (
+        <div key={t.topic} className="flex items-center justify-between">
+          <span className="text-sm text-gray-700">{t.topic}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">{t.questionsAnswered} questions</span>
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{
+                color: t.avgScore >= 60 ? "#d97706" : "#dc2626",
+                backgroundColor: t.avgScore >= 60 ? "#fef3c7" : "#fee2e2",
+              }}
+            >
+              {t.avgScore}%
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+        )}
+        
         {/* Table section */}
         <div className="flex-1 flex flex-col min-h-0">
           {/* Section header */}
