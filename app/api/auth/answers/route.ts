@@ -5,9 +5,9 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-export async function POST(req: Request) {
+export async function POST(req: Request) { // to score the interview answers using Groq
   const { prompt } = await req.json();
-  console.log("Received prompt for scoring:", prompt);
+  // console.log("Received prompt for scoring:", prompt);
   const res = await client.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [{ role: "user", content: prompt }],
@@ -27,7 +27,10 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PATCH(req: Request) {
+
+import { getEmbedding } from "@/lib/embeddings"; // used to turn each question's topic into a vector for semantic clustering later
+
+export async function PATCH(req: Request) { // to update the interview session with the final score and feedback after the interview is completed
   const authSession = await getServerSession(authOptions);
   if (!authSession?.user?.email) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
@@ -57,6 +60,32 @@ export async function PATCH(req: Request) {
       answers: JSON.stringify(answers),
     },
   });
+
+  // Generate + store an embedding for each question's topic, so weak-topics
+  // clustering can later tell that e.g. "Hash Maps" and "Hashing" mean the same thing.
+  // This runs sequentially (not Promise.all) because the local embedding model
+  // processes one input at a time efficiently — parallel calls don't speed it up
+  // and can spike memory.
+  // Scores items look like { id, topic, score, feedback } — no question text,
+  // so we pull the actual question string from target.questions (saved earlier
+  // when questions were generated), matching by 1-indexed id -> array index.
+  const storedQuestions = Array.isArray(target.questions) ? (target.questions as any[]) : [];
+
+  for (const s of scores) {
+    const matchedQuestion = storedQuestions[s.id - 1]?.question ?? "";
+    const embedding = await getEmbedding(s.topic);
+
+    await prisma.questionEmbedding.create({
+      data: {
+        sessionId: id,
+        questionId: s.id,
+        question: matchedQuestion,
+        topic: s.topic,
+        embedding: embedding,
+        score: s.score ?? null,
+      },
+    });
+  }
 
   return new Response(JSON.stringify(result), { status: 200 });
 }
