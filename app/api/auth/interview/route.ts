@@ -2,7 +2,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export async function POST(req: Request) {
+export async function POST(req: Request) { //to create a new interview session and save it to the database
   const authSession = await getServerSession(authOptions);
   if (!authSession?.user?.email) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   return new Response(JSON.stringify(result), { status: 200 });
 }
 
-export async function GET(req: Request) {
+export async function GET(req: Request) { // to fetch the interview session data from the database
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
 
@@ -93,7 +93,7 @@ export async function GET(req: Request) {
 }
 
 // add to app/api/auth/interview/route.ts
-export async function DELETE(req: Request) {
+export async function DELETE(req: Request) { // to delete the interview session from the database
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return new Response(JSON.stringify({ error: "Missing id" }), { status: 400 });

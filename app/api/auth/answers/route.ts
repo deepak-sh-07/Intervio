@@ -28,7 +28,7 @@ export async function POST(req: Request) { // to score the interview answers usi
 }
 
 
-import { getEmbedding } from "@/lib/embeddings"; // used to turn each question's topic into a vector for semantic clustering later
+import { getEmbedding } from "@/lib/embeddings"; // embeds each question's text so similar-questions can compare by meaning
 
 export async function PATCH(req: Request) { // to update the interview session with the final score and feedback after the interview is completed
   const authSession = await getServerSession(authOptions);
@@ -41,6 +41,10 @@ export async function PATCH(req: Request) { // to update the interview session w
     return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400 });
   }
 
+  if (!Array.isArray(scores)) {
+  return new Response(JSON.stringify({ error: "scores must be an array" }), { status: 400 });
+  }
+  
   const target = await prisma.interviewSession.findUnique({ where: { id } });
   if (!target) {
     return new Response(JSON.stringify({ error: "Session not found" }), { status: 404 });
@@ -61,31 +65,30 @@ export async function PATCH(req: Request) { // to update the interview session w
     },
   });
 
-  // Generate + store an embedding for each question's topic, so weak-topics
-  // clustering can later tell that e.g. "Hash Maps" and "Hashing" mean the same thing.
-  // This runs sequentially (not Promise.all) because the local embedding model
-  // processes one input at a time efficiently — parallel calls don't speed it up
-  // and can spike memory.
-  // Scores items look like { id, topic, score, feedback } — no question text,
-  // so we pull the actual question string from target.questions (saved earlier
-  // when questions were generated), matching by 1-indexed id -> array index.
-  const storedQuestions = Array.isArray(target.questions) ? (target.questions as any[]) : [];
+  // Generate + store an embedding for each question's TEXT, so similar-questions
+// can later find semantically similar past questions by meaning, not keywords.
+// (Originally this embedded the topic for clustering — dropped that approach
+// since short topic labels didn't separate cleanly; see test results earlier.)
+// This runs sequentially (not Promise.all) because the local embedding model
+// processes one input at a time efficiently — parallel calls don't speed it up
+// and can spike memory.
+const storedQuestions = Array.isArray(target.questions) ? (target.questions as any[]) : [];
 
-  for (const s of scores) {
-    const matchedQuestion = storedQuestions[s.id - 1]?.question ?? "";
-    const embedding = await getEmbedding(s.topic);
+for (const s of scores) {
+  const matchedQuestion = storedQuestions[s.id - 1]?.question ?? "";
+  const embedding = await getEmbedding(matchedQuestion);   // ← changed from s.topic
 
-    await prisma.questionEmbedding.create({
-      data: {
-        sessionId: id,
-        questionId: s.id,
-        question: matchedQuestion,
-        topic: s.topic,
-        embedding: embedding,
-        score: s.score ?? null,
-      },
-    });
-  }
+  await prisma.questionEmbedding.create({
+    data: {
+      sessionId: id,
+      questionId: s.id,
+      question: matchedQuestion,
+      topic: s.topic,
+      embedding: embedding,
+      score: s.score ?? null,
+    },
+  });
+}
 
   return new Response(JSON.stringify(result), { status: 200 });
 }

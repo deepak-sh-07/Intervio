@@ -60,7 +60,7 @@ export default function SessionPage() {
     const storedId = localStorage.getItem("CurrId");
     if (!storedId) return;
 
-    const res = await fetch(`/api/auth/interview?id=${storedId}`);
+    const res = await fetch(`/api/auth/interview?id=${storedId}`); // fetch the interview session data from the database
     const data = await res.json();
     setSessionData(data);
     const count = getQuestionCount(data.duration);
@@ -141,7 +141,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   // save progress to DB so refresh doesn't lose it
   const storedId = localStorage.getItem("CurrId");
   if (storedId) {
-    fetch("/api/auth/answers", {
+    fetch("/api/auth/answers", { // to save single answer to the database so that if the user refreshes the page, the progress is not lost
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: storedId, answers: updatedAnswers }),
@@ -184,8 +184,8 @@ Respond ONLY with a JSON array, no markdown, no extra text:
 `;
 
     console.log("Scoring Prompt:", scoringPrompt);
-    const res = await fetch("/api/auth/answers", {
-      method: "POST",
+    const res = await fetch("/api/auth/answers", { // to evaluate the answers and get the scores and feedback from the Groq API
+      method: "POST", 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: scoringPrompt }),
     });
@@ -198,7 +198,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
 
     const overallScore = Math.round(scores.reduce((sum: number, s: any) => sum + s.score, 0) / scores.length);
 
-    const result = await fetch("/api/auth/answers", {
+    const result = await fetch("/api/auth/answers", { // to update the interview session with the final score and feedback after the interview is completed
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

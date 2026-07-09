@@ -333,7 +333,7 @@ export default function Dashboard() {
     if (status !== "authenticated") return;
 
     try {
-      const res = await fetch("/api/auth/interview");
+      const res = await fetch("/api/auth/interview"); // is used to load all the prev interviews from the database and display them in the dashboard
       if (!res.ok) {
         console.warn("Could not load sessions:", res.status);
         setInterviews([]);   // ⬅️ don't attempt to .map() an error object
@@ -369,7 +369,7 @@ export default function Dashboard() {
   if (!session) return null;
 
   async function handleDelete(id: string) {
-    await fetch(`/api/auth/interview?id=${id}`, { method: "DELETE" });
+    await fetch(`/api/auth/interview?id=${id}`, { method: "DELETE" }); // to delete the interview session from the database
     setInterviews((prev) => prev.filter((x) => x.id !== id));
   }
 
@@ -390,7 +390,7 @@ export default function Dashboard() {
       date: now,
     };
 
-    const req = await fetch("/api/auth/interview", {
+    const req = await fetch("/api/auth/interview", { // creating a new interview session and saving it to the database
       headers: { "Content-Type": "application/json" },
       method: "POST",
       body: JSON.stringify(newInterview),
@@ -403,7 +403,7 @@ export default function Dashboard() {
     const id = localStorage.getItem("CurrId");
     console.log("Current ID stored in localStorage:", id);
     console.log(res);
-    router.push("/session");
+    router.push("/session"); // then going to session page to start the interview session
   }
 
   return (
@@ -412,8 +412,8 @@ export default function Dashboard() {
       {/* Topbar */}
       <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">AI</div>
-          <span className="font-semibold text-gray-900 text-[15px]">InterviewAI</span>
+          {/* <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">AI</div>
+          <span className="font-semibold text-gray-900 text-[15px]">InterviewAI</span> */}
         </div>
         <nav className="flex items-center gap-1">
           {["Dashboard", "Analytics", "Templates", "Settings"].map((n) => (
