@@ -437,10 +437,10 @@ export default function Dashboard() {
         {/* Stats */}
         <div className="grid grid-cols-4 gap-3 flex-shrink-0">
           {[
-            { label: "Total sessions", val: stats.total, sub: "+8 this week", subColor: "text-emerald-600" },
-            { label: "Avg. score", val: `${stats.avg}%`, sub: "+3 pts vs last month", subColor: "text-emerald-600" },
+            { label: "Total sessions", val: stats.total,  subColor: "text-emerald-600" },
+            { label: "Avg. score", val: `${stats.avg}%`,  subColor: "text-emerald-600" },
             { label: "Time practiced", val: `${stats.hours}h`, sub: "across all sessions", subColor: "text-gray-400" },
-            { label: "Roles covered", val: stats.roles, sub: "SWE, PM, DS & more", subColor: "text-gray-400" },
+            { label: "Roles covered", val: stats.roles, subColor: "text-gray-400" },
           ].map(({ label, val, sub, subColor }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 px-5 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{label}</p>

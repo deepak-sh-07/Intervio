@@ -65,6 +65,10 @@ export async function PATCH(req: Request) { // to update the interview session w
     },
   });
 
+
+
+
+  
   // Generate + store an embedding for each question's TEXT, so similar-questions
 // can later find semantically similar past questions by meaning, not keywords.
 // (Originally this embedded the topic for clustering — dropped that approach
