@@ -27,6 +27,15 @@ interface SessionData {
   feedback: string;
 }
 
+interface SimilarQuestion {
+  id: string;
+  question: string;
+  topic: string;
+  score: number | null;
+  sessionId: string;
+  similarity: number;
+}
+
 export default function ResultsPage() {
   const [session, setSession] = useState<SessionData | null>(null);
   const [scores, setScores] = useState<ScoreItem[]>([]);
@@ -34,6 +43,11 @@ export default function ResultsPage() {
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
+
+  // Per-question similar-questions state, keyed by question id.
+  // null = not fetched yet, [] = fetched but no matches, array = results.
+  const [similarMap, setSimilarMap] = useState<Record<number, SimilarQuestion[] | null>>({});
+  const [similarLoading, setSimilarLoading] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     async function fetchResults() {
@@ -56,6 +70,33 @@ export default function ResultsPage() {
 
     fetchResults();
   }, []);
+
+  async function loadSimilar(q: QuestionItem) {
+    // Note: this question's own embedding is already in the DB (stored right
+    // after this interview was scored), so it will come back as a near-1.0
+    // match against itself. We filter that exact-text match out at render time
+    // rather than here, since "same question text" is a simpler and more
+    // reliable check than trying to exclude by session/question id.
+    setSimilarLoading((prev) => ({ ...prev, [q.id]: true }));
+    try {
+      const res = await fetch("/api/auth/similar-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: q.question }),
+      });
+      if (!res.ok) {
+        setSimilarMap((prev) => ({ ...prev, [q.id]: [] }));
+        return;
+      }
+      const data = await res.json();
+      setSimilarMap((prev) => ({ ...prev, [q.id]: data.similarQuestions || [] }));
+    } catch (err) {
+      console.error("Failed to load similar questions:", err);
+      setSimilarMap((prev) => ({ ...prev, [q.id]: [] }));
+    } finally {
+      setSimilarLoading((prev) => ({ ...prev, [q.id]: false }));
+    }
+  }
 
   function scoreColor(score: number) {
     if (score >= 80) return "#22c55e";
@@ -107,6 +148,9 @@ export default function ResultsPage() {
           {questions.map((q, i) => {
             const score = scores.find((s) => s.id === q.id);
             const answer = answers.find((a) => a.id === q.id);
+            const similar = similarMap[q.id];
+            const isLoadingSimilar = similarLoading[q.id];
+
             return (
               <div key={q.id} style={{ background: "#0a0a0a", border: "0.5px solid #222", borderRadius: "12px", padding: "1.75rem" }}>
 
@@ -134,11 +178,70 @@ export default function ResultsPage() {
                 </div>
 
                 {/* AI feedback */}
-                <div>
+                <div style={{ marginBottom: "1.25rem" }}>
                   <span style={{ fontSize: "11px", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>AI feedback</span>
                   <p style={{ fontSize: "14px", color: "#aaa", lineHeight: "1.6", borderLeft: "2px solid #333", paddingLeft: "0.75rem" }}>
                     {score?.feedback || "No feedback available"}
                   </p>
+                </div>
+
+                {/* Similar past questions */}
+                <div>
+                  {similar === undefined && (
+                    <button
+                      onClick={() => loadSimilar(q)}
+                      disabled={isLoadingSimilar}
+                      style={{
+                        fontSize: "13px",
+                        color: "#888",
+                        background: "transparent",
+                        border: "0.5px solid #2a2a2a",
+                        borderRadius: "6px",
+                        padding: "6px 12px",
+                        cursor: isLoadingSimilar ? "default" : "pointer",
+                      }}
+                    >
+                      {isLoadingSimilar ? "Searching..." : "Find similar past questions"}
+                    </button>
+                  )}
+
+                  {similar && similar.length === 0 && (
+                    <p style={{ fontSize: "13px", color: "#555" }}>No similar past questions found yet.</p>
+                  )}
+
+                  {similar && similar.length > 0 && (
+                    <div>
+                      <span style={{ fontSize: "11px", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "8px" }}>
+                        Similar past questions
+                      </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {similar
+                          .filter((s) => s.question !== q.question)
+                          .slice(0, 3)
+                          .map((s) => (
+                            <div
+                              key={s.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-start",
+                                justifyContent: "space-between",
+                                gap: "12px",
+                                background: "#111",
+                                borderRadius: "8px",
+                                padding: "0.65rem 0.9rem",
+                              }}
+                            >
+                              <span style={{ fontSize: "13px", color: "#aaa", lineHeight: "1.5" }}>{s.question}</span>
+                              {s.score !== null && (
+                                <span style={{ fontSize: "12px", fontWeight: 600, color: scoreColor(s.score), whiteSpace: "nowrap" }}>
+                                  {s.score}/100
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
               </div>

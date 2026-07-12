@@ -68,7 +68,7 @@ export async function PATCH(req: Request) { // to update the interview session w
 
 
 
-  
+
   // Generate + store an embedding for each question's TEXT, so similar-questions
 // can later find semantically similar past questions by meaning, not keywords.
 // (Originally this embedded the topic for clustering — dropped that approach
@@ -80,7 +80,7 @@ const storedQuestions = Array.isArray(target.questions) ? (target.questions as a
 
 for (const s of scores) {
   const matchedQuestion = storedQuestions[s.id - 1]?.question ?? "";
-  const embedding = await getEmbedding(matchedQuestion);   // ← changed from s.topic
+  const embedding = await getEmbedding(matchedQuestion);   
 
   await prisma.questionEmbedding.create({
     data: {

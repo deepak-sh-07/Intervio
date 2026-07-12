@@ -36,6 +36,3 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
-
-// Hash Maps vs Hashing: 0.74681886246704
-// Hash Maps vs DP: 0.161935908263645
