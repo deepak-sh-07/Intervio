@@ -2,12 +2,13 @@ import Groq from "groq-sdk";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getEmbedding } from "@/lib/embeddings";
+import { getQuestionCollection } from "@/lib/chroma";
 
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: Request) { // to score the interview answers using Groq
   const { prompt } = await req.json();
-  // console.log("Received prompt for scoring:", prompt);
   const res = await client.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [{ role: "user", content: prompt }],
@@ -27,9 +28,6 @@ export async function POST(req: Request) { // to score the interview answers usi
   }
 }
 
-
-import { getEmbedding } from "@/lib/embeddings"; // embeds each question's text so similar-questions can compare by meaning
-
 export async function PATCH(req: Request) { // to update the interview session with the final score and feedback after the interview is completed
   const authSession = await getServerSession(authOptions);
   if (!authSession?.user?.email) {
@@ -40,11 +38,10 @@ export async function PATCH(req: Request) { // to update the interview session w
   if (!id || !scores || overallScore === undefined) {
     return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400 });
   }
-
   if (!Array.isArray(scores)) {
-  return new Response(JSON.stringify({ error: "scores must be an array" }), { status: 400 });
+    return new Response(JSON.stringify({ error: "scores must be an array" }), { status: 400 });
   }
-  
+
   const target = await prisma.interviewSession.findUnique({ where: { id } });
   if (!target) {
     return new Response(JSON.stringify({ error: "Session not found" }), { status: 404 });
@@ -65,34 +62,52 @@ export async function PATCH(req: Request) { // to update the interview session w
     },
   });
 
-
-
-
-
   // Generate + store an embedding for each question's TEXT, so similar-questions
-// can later find semantically similar past questions by meaning, not keywords.
-// (Originally this embedded the topic for clustering — dropped that approach
-// since short topic labels didn't separate cleanly; see test results earlier.)
-// This runs sequentially (not Promise.all) because the local embedding model
-// processes one input at a time efficiently — parallel calls don't speed it up
-// and can spike memory.
-const storedQuestions = Array.isArray(target.questions) ? (target.questions as any[]) : [];
+  // can later find semantically similar past questions by meaning, not keywords.
+  // Postgres remains the source of truth (QuestionEmbedding table); Chroma is
+  // written alongside it as a fast similarity-search index over the same data.
+  // This runs sequentially (not Promise.all) because the local embedding model
+  // processes one input at a time efficiently — parallel calls don't speed it up
+  // and can spike memory.
+  const storedQuestions = Array.isArray(target.questions) ? (target.questions as any[]) : [];
+  const chromaCollection = await getQuestionCollection();
 
-for (const s of scores) {
-  const matchedQuestion = storedQuestions[s.id - 1]?.question ?? "";
-  const embedding = await getEmbedding(matchedQuestion);   
+  for (const s of scores) {
+    const matchedQuestion = storedQuestions[s.id - 1]?.question ?? "";
+    const embedding = await getEmbedding(matchedQuestion);
 
-  await prisma.questionEmbedding.create({
-    data: {
-      sessionId: id,
-      questionId: s.id,
-      question: matchedQuestion,
-      topic: s.topic,
-      embedding: embedding,
-      score: s.score ?? null,
-    },
-  });
-}
+    const saved = await prisma.questionEmbedding.create({
+      data: {
+        sessionId: id,
+        questionId: s.id,
+        question: matchedQuestion,
+        topic: s.topic,
+        embedding: embedding,
+        score: s.score ?? null,
+      },
+    });
+
+    // Mirror the same row into Chroma, keyed by the Postgres row's own id so
+    // the two stores stay linkable (e.g. to delete both sides together later).
+    try {
+      await chromaCollection.add({
+        ids: [saved.id],
+        embeddings: [embedding],
+        documents: [matchedQuestion],
+        metadatas: [{
+          topic: s.topic,
+          score: s.score ?? null,
+          sessionId: id,
+          userId: user.id,
+          questionId: s.id,
+        }],
+      });
+    } catch (err) {
+      // Don't fail the whole request if Chroma is down — Postgres already has
+      // the data, so this is a degraded (but recoverable) state, not data loss.
+      console.error("Failed to write embedding to Chroma:", err);
+    }
+  }
 
   return new Response(JSON.stringify(result), { status: 200 });
 }
