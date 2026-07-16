@@ -15,7 +15,6 @@ export default function SessionPage() {
   const router = useRouter();
   const getQuestionCount = (duration: string) => {
     const mins = parseInt(duration.slice(0, 2), 10);
-    // console.log("THis")
 
     if (mins <= 15) return 3;
     if (mins <= 30) return 6;

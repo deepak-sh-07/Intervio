@@ -102,7 +102,7 @@ export async function GET(req: Request) {
 
   // weakest first — lowest avg score, but only clusters with enough data to be meaningful
   const weakTopics = topicStats
-    .filter((t) => t.questionsAnswered >= 2) // ignore one-off flukes
+    .filter((t) => t.questionsAnswered >= 1) // ignore one-off flukes
     .sort((a, b) => a.avgScore - b.avgScore);
 
   return new Response(JSON.stringify({ topics: topicStats, weakTopics }), { status: 200 });

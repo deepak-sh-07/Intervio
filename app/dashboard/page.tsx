@@ -285,7 +285,7 @@ function NewSessionModal({ open, onClose, onCreate }: { open: boolean; onClose: 
 export default function Dashboard() {
   const router = useRouter();
   const [interviews, setInterviews] = useState<Interview[]>([]);
-  const [weakTopics, setWeakTopics] = useState<{ topic: string; avgScore: number; questionsAnswered: number }[]>([]);
+ 
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -296,20 +296,7 @@ export default function Dashboard() {
   const { data: session, status } = useSession();
   const uniqueRoles = useMemo(() => [...new Set(interviews.map((i) => i.role))], [interviews]);
 
-  useEffect(() => {
-  async function loadWeakTopics() {
-    if (status !== "authenticated") return;
-    try {
-      const res = await fetch("/api/auth/weak-topics");
-      if (!res.ok) return;
-      const data = await res.json();
-      setWeakTopics(data.weakTopics || []);
-    } catch (err) {
-      console.error("Failed to load weak topics:", err);
-    }
-  }
-  loadWeakTopics();
-}, [status]);
+  
   const filtered = useMemo(() => interviews.filter((r) => {
     const q = search.toLowerCase();
     const matchQ = !q || r.role.toLowerCase().includes(q) || r.company.toLowerCase().includes(q) || r.skills.join(" ").toLowerCase().includes(q) || r.topics.join(" ").toLowerCase().includes(q);
@@ -416,13 +403,17 @@ export default function Dashboard() {
           <span className="font-semibold text-gray-900 text-[15px]">InterviewAI</span> */}
         </div>
         <nav className="flex items-center gap-1">
-          {["Dashboard", "Analytics", "Templates", "Settings"].map((n) => (
-            <button key={n} onClick={() => setActiveNav(n)}
-              className={`px-3.5 py-1.5 text-sm rounded-lg transition-all ${activeNav === n ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"}`}>
-              {n}
-            </button>
-          ))}
-        </nav>
+  {["Dashboard", "Weak Topics", "Templates", "Settings"].map((n) => (
+    <button key={n} onClick={() => {
+        setActiveNav(n);
+        if (n === "Weak Topics") router.push("/weak-topics");
+        if (n === "Dashboard") router.push("/dashboard");
+      }}
+      className={`px-3.5 py-1.5 text-sm rounded-lg transition-all ${activeNav === n ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"}`}>
+      {n}
+    </button>
+  ))}
+</nav>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold">
             {initials(session.user?.name || session.user?.email || "U")}
@@ -449,31 +440,7 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
-        {/* Weak topics */}
-{weakTopics.length > 0 && (
-  <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 flex-shrink-0">
-    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Weak topics</p>
-    <div className="flex flex-col gap-2">
-      {weakTopics.slice(0, 5).map((t) => (
-        <div key={t.topic} className="flex items-center justify-between">
-          <span className="text-sm text-gray-700">{t.topic}</span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">{t.questionsAnswered} questions</span>
-            <span
-              className="text-xs font-semibold px-2 py-0.5 rounded-full"
-              style={{
-                color: t.avgScore >= 60 ? "#d97706" : "#dc2626",
-                backgroundColor: t.avgScore >= 60 ? "#fef3c7" : "#fee2e2",
-              }}
-            >
-              {t.avgScore}%
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-        )}
+       
         
         {/* Table section */}
         <div className="flex-1 flex flex-col min-h-0">
