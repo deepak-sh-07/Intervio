@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from "next-auth/react";
+
 export default function SessionPage() {
   const [sessionData, setSessionData] = useState<any>(null);
   const [qPrompt, setQPrompt] = useState("");
@@ -13,6 +14,12 @@ export default function SessionPage() {
   const [ans, setAns] = useState("")
   const { data: session, status } = useSession();
   const router = useRouter();
+
+  // ── Voice-to-text state ─────────────────────────────────────────────────
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(true);
+  const recognitionRef = useRef<any>(null);
+
   const getQuestionCount = (duration: string) => {
     const mins = parseInt(duration.slice(0, 2), 10);
 
@@ -33,44 +40,42 @@ export default function SessionPage() {
   }
 
   async function getQuestion(prompt?: string) { // create questions
-  const finalPrompt = prompt || qPrompt;
-  if (!finalPrompt) return;
-  const res = await fetch("/api/auth/questions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: finalPrompt }),
-  });
-  const data = await res.json();
-  setQuestions(data);
-  saveQuestionsToDB(data);
-  return data; // ⬅️ add this
-}
+    const finalPrompt = prompt || qPrompt;
+    if (!finalPrompt) return;
+    const res = await fetch("/api/auth/questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: finalPrompt }),
+    });
+    const data = await res.json();
+    setQuestions(data);
+    saveQuestionsToDB(data);
+    return data; // ⬅️ add this
+  }
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
-  
-
   useEffect(() => {
-  async function fetchAndPrepare() {
-    if (status !== "authenticated") return;
+    async function fetchAndPrepare() {
+      if (status !== "authenticated") return;
 
-    const storedId = localStorage.getItem("CurrId");
-    if (!storedId) return;
+      const storedId = localStorage.getItem("CurrId");
+      if (!storedId) return;
 
-    const res = await fetch(`/api/auth/interview?id=${storedId}`); // fetch the interview session data from the database
-    const data = await res.json();
-    setSessionData(data);
-    const count = getQuestionCount(data.duration);
-    setQuestionCount(count);
+      const res = await fetch(`/api/auth/interview?id=${storedId}`); // fetch the interview session data from the database
+      const data = await res.json();
+      setSessionData(data);
+      const count = getQuestionCount(data.duration);
+      setQuestionCount(count);
 
-    let loadedQuestions = data.questions;
+      let loadedQuestions = data.questions;
 
-    if (data.questions && data.questions.length > 0) {
-      setQuestions(data.questions);
-    } else {
-      const prompt = `
+      if (data.questions && data.questions.length > 0) {
+        setQuestions(data.questions);
+      } else {
+        const prompt = `
 You are an expert technical interviewer. Generate ${count} interview questions for the following session:
 
 Role: ${data.role}
@@ -94,31 +99,89 @@ Respond ONLY with a JSON array, no markdown, no extra text:
   { "id": 2, "question": "...", "topic": "..." }
 ]
 `;
-      setQPrompt(prompt);
-      await getQuestion(prompt); // awaited so we can use the result below
-    }
+        setQPrompt(prompt);
+        await getQuestion(prompt); // awaited so we can use the result below
+      }
 
-    // restore progress if this session has saved, incomplete answers
-    if (data.answers && data.status !== "Completed") {
-      try {
-        const savedAnswers = JSON.parse(data.answers);
-        if (Array.isArray(savedAnswers) && savedAnswers.length > 0 && savedAnswers.length < count) {
-          setAnswers(savedAnswers);
-          const resumeIndex = savedAnswers.length;
-          setCurrIndex(resumeIndex);
-          const qs = loadedQuestions?.length ? loadedQuestions : questions;
-          if (qs && qs[resumeIndex]) {
-            setCurrQuestion(qs[resumeIndex].question);
+      // restore progress if this session has saved, incomplete answers
+      if (data.answers && data.status !== "Completed") {
+        try {
+          const savedAnswers = JSON.parse(data.answers);
+          if (Array.isArray(savedAnswers) && savedAnswers.length > 0 && savedAnswers.length < count) {
+            setAnswers(savedAnswers);
+            const resumeIndex = savedAnswers.length;
+            setCurrIndex(resumeIndex);
+            const qs = loadedQuestions?.length ? loadedQuestions : questions;
+            if (qs && qs[resumeIndex]) {
+              setCurrQuestion(qs[resumeIndex].question);
+            }
           }
+        } catch (e) {
+          console.error("Failed to parse saved answers:", e);
         }
-      } catch (e) {
-        console.error("Failed to parse saved answers:", e);
       }
     }
-  }
 
-  fetchAndPrepare();
-}, [status]);
+    fetchAndPrepare();
+  }, [status]);
+
+  // ── Set up SpeechRecognition once on mount ──────────────────────────────
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setVoiceSupported(false); // Firefox / unsupported browser
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;      // keep listening across pauses, don't stop after one sentence
+    recognition.interimResults = false; // only commit finished phrases, avoids garbled partial text
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          transcript += event.results[i][0].transcript;
+        }
+      }
+      if (transcript) {
+        setAns((prev) => (prev ? prev.trim() + " " + transcript.trim() : transcript.trim()));
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false); // browser can stop on its own after a silence timeout
+    };
+
+    recognitionRef.current = recognition;
+  }, []);
+
+  // Inject the pulse keyframes once (inline styles can't declare @keyframes directly)
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.textContent = `@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }`;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+
+  function toggleListening() {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  }
 
   if (status === "loading") return <p>Loading…</p>;
   if (!session) return null;
@@ -127,37 +190,42 @@ Respond ONLY with a JSON array, no markdown, no extra text:
     setCurrIndex(0);
     setCurrQuestion(questions[0].question);
   }
+
   const submitAnswer = () => {
-  const trimmed = ans.trim();
-  if (trimmed.length < 15) {  // reject too-short/placeholder answers
-    alert("Please provide a more complete answer before continuing.");
-    return;
-  }
-  const updatedAnswers = [...answers, { id: currIndex + 1, answer: ans }];
-  setAnswers(updatedAnswers);
-  setAns("");
+    const trimmed = ans.trim();
+    if (trimmed.length < 15) {  // reject too-short/placeholder answers
+      alert("Please provide a more complete answer before continuing.");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    }
+    const updatedAnswers = [...answers, { id: currIndex + 1, answer: ans }];
+    setAnswers(updatedAnswers);
+    setAns("");
 
-  // save progress to DB so refresh doesn't lose it
-  const storedId = localStorage.getItem("CurrId");
-  if (storedId) {
-    fetch("/api/auth/answers", { // to save single answer to the database so that if the user refreshes the page, the progress is not lost
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: storedId, answers: updatedAnswers }),
-    }).catch((err) => console.error("Failed to save progress:", err));
-  }
+    // save progress to DB so refresh doesn't lose it
+    const storedId = localStorage.getItem("CurrId");
+    if (storedId) {
+      fetch("/api/auth/answers", { // to save single answer to the database so that if the user refreshes the page, the progress is not lost
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: storedId, answers: updatedAnswers }),
+      }).catch((err) => console.error("Failed to save progress:", err));
+    }
 
-  const nextIndex = currIndex + 1;
-  console.log("NextIndex = ", nextIndex, "questioncount = ", questionCount);
+    const nextIndex = currIndex + 1;
+    console.log("NextIndex = ", nextIndex, "questioncount = ", questionCount);
 
-  if (nextIndex < questionCount) {
-    setCurrIndex(nextIndex);
-    setCurrQuestion(questions[nextIndex].question);
-  } else {
-    console.log("Interview complete!");
-    evaluate(updatedAnswers);
+    if (nextIndex < questionCount) {
+      setCurrIndex(nextIndex);
+      setCurrQuestion(questions[nextIndex].question);
+    } else {
+      console.log("Interview complete!");
+      evaluate(updatedAnswers);
+    }
   }
-}
 
   async function evaluate(answers: any[]) {
     if (!sessionData) return;
@@ -184,7 +252,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
 
     console.log("Scoring Prompt:", scoringPrompt);
     const res = await fetch("/api/auth/answers", { // to evaluate the answers and get the scores and feedback from the Groq API
-      method: "POST", 
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: scoringPrompt }),
     });
@@ -219,6 +287,7 @@ Respond ONLY with a JSON array, no markdown, no extra text:
     }
     router.push("/results");
   }
+
   return (
     <div style={{ background: "#000", minHeight: "100vh", padding: "0", fontFamily: "sans-serif" }}>
       <div style={{ maxWidth: "720px", margin: "0 auto", padding: "2.5rem 2rem" }}>
@@ -256,7 +325,32 @@ Respond ONLY with a JSON array, no markdown, no extra text:
 
         {/* Answer */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <span style={{ fontSize: "13px", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em" }}>Your answer</span>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: "13px", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em" }}>Your answer</span>
+            {voiceSupported && (
+              <button
+                type="button"
+                onClick={toggleListening}
+                disabled={!currQuestion}
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  padding: "5px 12px", borderRadius: "20px", fontSize: "12px",
+                  border: `0.5px solid ${isListening ? "#dc2626" : "#333"}`,
+                  background: isListening ? "#dc262622" : "transparent",
+                  color: isListening ? "#f87171" : "#666",
+                  cursor: currQuestion ? "pointer" : "not-allowed",
+                  opacity: currQuestion ? 1 : 0.4,
+                }}
+              >
+                <span style={{
+                  width: "8px", height: "8px", borderRadius: "50%",
+                  background: isListening ? "#dc2626" : "#666",
+                  animation: isListening ? "pulse 1.2s infinite" : "none",
+                }} />
+                {isListening ? "Listening…" : "Speak answer"}
+              </button>
+            )}
+          </div>
           <textarea
             value={ans}
             onChange={(e) => setAns(e.target.value)}
