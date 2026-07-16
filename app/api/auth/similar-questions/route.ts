@@ -47,12 +47,7 @@ export async function POST(req: Request) {
         topic: meta.topic ?? "",
         score: meta.score ?? null,
         sessionId: meta.sessionId ?? "",
-        // Chroma's default space here is l2 (squared euclidean distance), not
-        // cosine — smaller distance = more similar, the opposite direction from
-        // the cosine "1 = identical" scale the old route used. Converting to a
-        // 0-1-ish similarity score keeps the response shape familiar for the
-        // frontend, which just sorts/displays it rather than doing math on it.
-        similarity: 1 / (1 + distances[i]),
+        similarity: distances[i] != null ? 1 - distances[i] : 0,
       };
     })
     .filter((r) => r.question !== text) // drop the exact-text self-match
