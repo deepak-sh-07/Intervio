@@ -359,6 +359,15 @@ export default function Dashboard() {
     await fetch(`/api/auth/interview?id=${id}`, { method: "DELETE" }); // to delete the interview session from the database
     setInterviews((prev) => prev.filter((x) => x.id !== id));
   }
+  function handleRowOpen(row: Interview) {
+  if (row.status === "Completed") {
+    router.push(`/results?id=${row.id}`);
+  } else {
+    // In Progress / Abandoned — resume the actual interview, same flow "New session" uses
+    localStorage.setItem("CurrId", row.id.toString());
+    router.push("/session");
+  }
+}
 
   async function handleCreate(s: NewSession) {
     const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -376,6 +385,7 @@ export default function Dashboard() {
       status: "In Progress" as const,
       date: now,
     };
+    
 
     const req = await fetch("/api/auth/interview", { // creating a new interview session and saving it to the database
       headers: { "Content-Type": "application/json" },
@@ -403,7 +413,7 @@ export default function Dashboard() {
           <span className="font-semibold text-gray-900 text-[15px]">InterviewAI</span> */}
         </div>
         <nav className="flex items-center gap-1">
-  {["Dashboard", "Weak Topics", "Templates", "Settings"].map((n) => (
+  {["Dashboard", "Weak Topics"].map((n) => (
     <button key={n} onClick={() => {
         setActiveNav(n);
         if (n === "Weak Topics") router.push("/weak-topics");
@@ -522,8 +532,8 @@ export default function Dashboard() {
                       <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">{row.date}</td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => router.push(`/results?id=${row.id}`)}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 text-sm transition-colors" title="View">
+                          <button onClick={() => handleRowOpen(row)}
+  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 text-sm transition-colors" title={row.status === "Completed" ? "View" : "Resume"}>
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />

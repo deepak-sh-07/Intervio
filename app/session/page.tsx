@@ -28,6 +28,30 @@ export default function SessionPage() {
     if (mins <= 45) return 9;
     return 12; // 60 min
   }
+  async function getWeakTopicsContext(): Promise<string> {
+  try {
+    const res = await fetch("/api/auth/weak-topics");
+    if (!res.ok) return "";
+    const data = await res.json();
+    const weak = (data.weakTopics || []) as { topic: string; avgScore: number }[];
+    if (weak.length === 0) return "";
+
+    const lines = weak
+      .slice(0, 5) // don't overload the prompt with the whole history
+      .map((t) => `- ${t.topic} (avg score: ${t.avgScore}%)`)
+      .join("\n");
+
+    return `
+The candidate has historically struggled with these topics, based on past interview performance:
+${lines}
+
+If any of these topics are relevant to the role/skills/topics listed above, prioritize including 1-2 questions on them. If none are relevant to this specific session, ignore this section entirely — do not force unrelated topics in.
+`;
+  } catch (err) {
+    console.error("Failed to load weak topics for prompt:", err);
+    return ""; // never let this block question generation if it fails
+  }
+}
 
   async function saveQuestionsToDB(questions: any[]) { //save those questions to db 
     const storedId = localStorage.getItem("CurrId");
@@ -75,6 +99,8 @@ export default function SessionPage() {
       if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions);
       } else {
+        const weakTopicsContext = await getWeakTopicsContext();
+        console.log("Weak topics context:", weakTopicsContext);
         const prompt = `
 You are an expert technical interviewer. Generate ${count} interview questions for the following session:
 
@@ -86,6 +112,7 @@ Difficulty: ${data.difficulty}
 Skills to assess: ${data.skills.join(", ")}
 Topics to cover: ${data.topics.join(", ")}
 Additional focus: ${data.focus || "None"}
+${weakTopicsContext}
 
 Rules:
 - Questions should match the difficulty level

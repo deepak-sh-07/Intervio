@@ -91,14 +91,18 @@ export async function GET(req: Request) {
   const clusters = clusterBySimilarity(embeddingRows);
 
   const topicStats = clusters.map((cluster) => {
-    const scored = cluster.members.filter((m) => typeof m.score === "number");
-    const totalScore = scored.reduce((sum, m) => sum + (m.score as number), 0);
-    return {
-      topic: labelCluster(cluster.members),
-      avgScore: scored.length ? Math.round(totalScore / scored.length) : 0,
-      questionsAnswered: cluster.members.length,
-    };
-  });
+  const scored = cluster.members.filter((m) => typeof m.score === "number");
+  const totalScore = scored.reduce((sum, m) => sum + (m.score as number), 0);
+  return {
+    topic: labelCluster(cluster.members),
+    avgScore: scored.length ? Math.round(totalScore / scored.length) : 0,
+    questionsAnswered: cluster.members.length,
+    questions: cluster.members.map((m) => ({
+      question: m.question,
+      score: m.score,
+    })),
+  };
+});
 
   // weakest first — lowest avg score, but only clusters with enough data to be meaningful
   const weakTopics = topicStats

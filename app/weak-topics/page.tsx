@@ -8,6 +8,7 @@ interface TopicStat {
   topic: string;
   avgScore: number;
   questionsAnswered: number;
+  questions: { question: string; score: number | null }[];
 }
 
 function scoreColor(s: number) {
@@ -21,7 +22,7 @@ export default function WeakTopicsPage() {
   const { status } = useSession();
   const [topics, setTopics] = useState<TopicStat[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status]);
@@ -73,25 +74,53 @@ export default function WeakTopicsPage() {
         ) : (
           <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50">
             {topics.map((t) => (
-              <div key={t.topic} className="flex items-center justify-between px-5 py-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{t.topic}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {t.questionsAnswered} question{t.questionsAnswered === 1 ? "" : "s"}
-                    {t.questionsAnswered < 2 && " · early signal, not enough data yet"}
-                  </p>
-                </div>
-                <span
-                  className="text-sm font-semibold px-2.5 py-1 rounded-full"
-                  style={{
-                    color: scoreColor(t.avgScore),
-                    backgroundColor: `${scoreColor(t.avgScore)}1a`,
-                  }}
-                >
-                  {t.avgScore}%
-                </span>
-              </div>
-            ))}
+  <div key={t.topic}>
+    <button
+      onClick={() => setExpandedTopic(expandedTopic === t.topic ? null : t.topic)}
+      className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+    >
+      <div>
+        <p className="text-sm font-medium text-gray-800">{t.topic}</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+                      {t.questionsAnswered} question{t.questionsAnswered === 1 ? "" : "s"}
+                      {" Touch to expand for details."}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <span
+          className="text-sm font-semibold px-2.5 py-1 rounded-full"
+          style={{
+            color: scoreColor(t.avgScore),
+            backgroundColor: `${scoreColor(t.avgScore)}1a`,
+          }}
+        >
+          {t.avgScore}%
+        </span>
+        <span className="text-gray-300 text-xs">
+          {expandedTopic === t.topic ? "▲" : "▼"}
+        </span>
+      </div>
+    </button>
+
+    {expandedTopic === t.topic && (
+      <div className="px-5 pb-4 pt-1 bg-gray-50/60">
+        {t.questions.map((q, i) => (
+          <div key={i} className="flex items-start justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
+            <p className="text-sm text-gray-600">{q.question}</p>
+            {q.score !== null && (
+              <span
+                className="text-xs font-medium shrink-0"
+                style={{ color: scoreColor(q.score) }}
+              >
+                {q.score}%
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+))}
           </div>
         )}
       </div>
